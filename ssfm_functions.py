@@ -214,12 +214,6 @@ def getZsteps( fiber:Fiber_class, input_signal:input_signal_class,stepmode,stepS
     
     
     
-
-    #if fiber.gamma == 0.0 or dz_current_step_to_next_step>= fiber.Length:
-    #    z_array=np.append(z_array,fiber.Length)
-    #    dz_array=   np.array([fiber.Length])
-    #    return (z_array, dz_array)
-    
     dz_current_step_to_next_step = zstep_NL(0,fiber,input_signal,stepmode,stepSafetyFactor)
     
     
