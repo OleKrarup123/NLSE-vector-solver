@@ -281,7 +281,22 @@ class ssfm_output_class:
       
 def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","cautious"),stepSafetyFactor=1.0):
     
-    print(f"Calculating zinfo")
+    Length_disp = input_signal.duration**2/np.abs(fiber.beta2)
+    Length_NL = 1/fiber.gamma/input_signal.Pmax   
+    testN=np.sqrt(Length_disp/Length_NL)
+
+
+    Nmin = np.sqrt(0.25*np.exp(3/2)) #Minimum N-value of Optical Wave breaking with Gaussian pulse
+    Length_wave_break = Length_disp/np.sqrt(testN**2/Nmin**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
+
+    print(f"testN={testN}")
+    print(f"Length_disp={Length_disp/1e3}km")
+    print(f"Length_NL={Length_NL/1e3}km")
+    print(f"Length_wave_break = {Length_wave_break/1e3} km")
+
+    
+    
+    print("Calculating zinfo")
     print(f"Stepmode = {stepConfig}, stepSafetyFactor = {stepSafetyFactor}")
     if stepConfig[0].lower() == "fixed":
         
@@ -297,8 +312,8 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
             
             
         elif type(stepConfig[1]) == int:
-            z_array=np.linspace(0,fiber.Length,stepConfig[1])
-            dz_array=np.ones( stepConfig[1]-1 )*(z_array[1]-z_array[0])            
+            z_array=np.linspace(0,fiber.Length,stepConfig[1]+1)
+            dz_array=np.ones( stepConfig[1])*(z_array[1]-z_array[0])            
 
             
         zinfo    =(z_array,dz_array)
@@ -336,6 +351,7 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
 
         #print(f"Finished {np.round(n/len(zinfo[1])*100,3)}% of simulation")
     #Return results
+    print("Finished running SSFM!!!")
     return ssfm_result
 
 
@@ -426,7 +442,7 @@ def plotPulseMatrix3D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:
   P_surf = 10*np.log10(P_surf)
   P_surf[P_surf<dB_cutoff]=dB_cutoff
   # Plot the surface.
-  surf = ax.plot_surface(T_surf, Z_surf, P_surf, cmap=cm.viridis,
+  surf = ax.plot_surface(T_surf, Z_surf, P_surf, cmap=cm.jet,
                         linewidth=0, antialiased=False)
   ax.set_xlabel('Time [ps]')
   ax.set_ylabel('Distance [m]')
