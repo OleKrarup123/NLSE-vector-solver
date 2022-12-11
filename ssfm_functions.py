@@ -284,20 +284,30 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
     print(f"Calculating zinfo")
     print(f"Stepmode = {stepConfig}, stepSafetyFactor = {stepSafetyFactor}")
     if stepConfig[0].lower() == "fixed":
-        dz=zstep_NL(0,fiber, input_signal,stepConfig[1],stepSafetyFactor)
-        z_array=np.arange(0,fiber.Length,dz)
         
-        if z_array[-1] != fiber.Length:
-            z_array=np.append(z_array,fiber.Length)
+        if type(stepConfig[1]) == str:
         
-        dz_array = np.diff( z_array)
-        zinfo=(z_array,dz_array)
+            dz=zstep_NL(0,fiber, input_signal,stepConfig[1],stepSafetyFactor)
+            z_array=np.arange(0,fiber.Length,dz)
+            
+            if z_array[-1] != fiber.Length:
+                z_array=np.append(z_array,fiber.Length)
+            
+            dz_array = np.diff( z_array)
+            
+            
+        elif type(stepConfig[1]) == int:
+            z_array=np.linspace(0,fiber.Length,stepConfig[1])
+            dz_array=np.ones( stepConfig[1]-1 )*(z_array[1]-z_array[0])            
+
+            
+        zinfo    =(z_array,dz_array)
         
     else:
         zinfo = getZsteps(fiber,input_signal,stepConfig[1],stepSafetyFactor)
-        dz_array=zinfo[1]
+        
     
-    print(f"Running SSFM with nsteps = {len(dz_array)}")
+    print(f"Running SSFM with nsteps = {len(zinfo[1])}")
     
     #Initialize arrays to store pulse and spectrum throughout fiber
     ssfm_result = ssfm_output_class(input_signal,fiber,zinfo)
@@ -311,7 +321,7 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
     pulse    = np.copy(input_signal.amplitude )
     spectrum = np.copy(input_signal.spectrum )
     
-    for n, dz in enumerate(dz_array):   
+    for n, dz in enumerate(zinfo[1]):   
         pulse*=np.exp(nonlinearity*getPower(pulse)*dz) #Apply nonlinearity
         
         spectrum = getSpectrumFromPulse(input_signal.timeFreq.t, pulse)*(disp_and_loss**dz) #Go to spectral domain and apply disp and loss
@@ -324,6 +334,7 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
         ssfm_result.pulseMatrix[n+1,:]=pulse
         ssfm_result.spectrumMatrix[n+1,:]=spectrum
 
+        #print(f"Finished {np.round(n/len(zinfo[1])*100,3)}% of simulation")
     #Return results
     return ssfm_result
 
@@ -377,7 +388,7 @@ def plotFirstAndLastPulse(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nra
   plt.xlabel("Time [ps]")
   plt.ylabel("Power [W]")
   plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
-  plt.yscale('log')
+  #plt.yscale('log')
   
   plt.legend()
   saveplot('first_and_last_pulse',**kwargs)
@@ -392,10 +403,10 @@ def plotPulseMatrix2D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:
   z = zvals
   T, Z = np.meshgrid(t, z)
   P=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
-  P[P<1e-100]=1e-100
+  P[P<1e-100]=np.NaN
   P = 10*np.log10(P)
-  P[P<dB_cutoff]=dB_cutoff
-  surf=ax.contourf(T, Z, P,levels=40)
+  P[P<dB_cutoff]=np.NaN
+  surf=ax.contourf(T, Z, P,levels=40, cmap="jet")
   ax.set_xlabel('Time [ps]')
   ax.set_ylabel('Distance [m]')
   cbar=fig.colorbar(surf, ax=ax)
@@ -552,20 +563,20 @@ def plotEverythingAboutSpectra(ssfm_result:ssfm_output_class,
 
 if __name__ == "__main__":
     
-    N  = 2**15 #Number of points
+    N  = 2**12 #Number of points
     dt = 0.1e-12 #Time resolution [s] 
     
     
     timeFreq_test=timeFreq_class(N,dt)
     
     #Define fiberulation parameters
-    Length          = 100e3      #Fiber length in m
+    Length          = 53*1.5      #Fiber length in m
     #nsteps          = 2**8     #Number of steps we divide the fiber into
     
-    gamma           = 0.1e-3     #Nonlinearity parameter in 1/W/m 
-    beta2           = -10e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
+    gamma           = 400e-3     #Nonlinearity parameter in 1/W/m 
+    beta2           = 100e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
     beta2          *= (1e-30)  #Convert fs^2 to s^2 so everything is in SI units
-    alpha_dB_per_m  = 0.2e-3   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
+    alpha_dB_per_m  = 0.0e-3   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
     
     #Note:  beta2>0 is normal dispersion with red light pulling ahead, 
     #       causing a negative leading chirp
@@ -579,16 +590,37 @@ if __name__ == "__main__":
     
     
     #Initialize Gaussian pulse
-    testAmplitude = np.sqrt(2)                    #Amplitude in units of sqrt(W)
-    testDuration  = 2**7*timeFreq_test.time_step   #Pulse 1/e^2 duration [s]
+
+    
+    testAmplitude = np.sqrt(1)                    #Amplitude in units of sqrt(W)
+    testDuration  =100*timeFreq_test.time_step   #Pulse 1/e^2 duration [s]
     testOffset    = 0                       #Time offset
     testChirp = 0
     testCarrierFreq=0
     testPulseType='gaussian' 
     testOrder = 1
     testNoiseAmplitude = 0.0
-      
     
+    
+    
+    
+    
+    Length_disp = testDuration**2/np.abs(beta2)
+    Length_NL = 1/gamma/testAmplitude**2   
+    
+
+    Nmin = np.sqrt(0.25*np.exp(3/2))
+
+    
+    testN=np.sqrt(Length_disp/Length_NL)
+
+
+    
+    #https://prefetch.eu/know/concept/optical-wave-breaking/
+    
+    Length_wave_break = Length_disp/np.sqrt(testN**2/Nmin**2-1) 
+    
+    print(f"testN={testN}, Length_disp={Length_disp/1e3}km, Length_NL={Length_NL/1e3}km, Length_wave_break = {Length_wave_break/1e3} km ")
     
     
     
@@ -612,20 +644,22 @@ if __name__ == "__main__":
         
         testInputSignal.spectrum=getSpectrumFromPulse(testInputSignal.timeFreq.t, testInputSignal.amplitude)
     
-    testStepConfig=("fixed","cautious")
-    testSafetyFactor = 10
+    testStepConfig=("fixed",2**11)
+    testSafetyFactor = 40
     
     #Run SSFM
     ssfm_result_test = SSFM(fiber,testInputSignal,stepConfig=testStepConfig,stepSafetyFactor=testSafetyFactor)
     
     #Plot pulses
-    nrange=800
-    cutoff=-60
-    plotEverythingAboutPulses(ssfm_result_test,nrange,cutoff,chirpPlotRange=(-20,20))
+    nrange_test=400
+    cutoff_test=-30
+    plotEverythingAboutPulses(ssfm_result_test,nrange_test,cutoff_test,chirpPlotRange=(-60,60))
+    
+ 
+    nrange_test=200
+    cutoff_test=-60    
     
     #Plot spectra
-    plotEverythingAboutSpectra(ssfm_result_test,nrange,cutoff)
+    plotEverythingAboutSpectra(ssfm_result_test,nrange_test,cutoff_test)
 
-
-    
 
