@@ -91,13 +91,12 @@ def sechPulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz):
 
 #Define function for adding white noise
 def noise_ASE(time,amplitude):
-    randomAmplitudes=np.random.normal(loc=0.0, scale=amplitude, size=len(time))
+    randomAmplitudes=np.random.normal(loc=0.0, scale=amplitude, size=len(time))*(1+0j)
     randomPhases = np.random.uniform(-pi,pi, len(time))
     return randomAmplitudes*np.exp(1j*randomPhases)   
 
 
-def getPulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order=1,noiseAmplitude=0.0):
-    
+def getPulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
     
     noise = noise_ASE(time,noiseAmplitude)
     
@@ -168,11 +167,11 @@ class Fiber_class:
       #TODO: Make alpha frequency dependent.  
       
 class input_signal_class:
-    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order=1,noiseAmplitude=0):
+    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
 
         
         self.timeFreq=timeFreq
-        self.amplitude = getPulse(self.timeFreq.t,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order=1,noiseAmplitude=0)
+        self.amplitude = getPulse(self.timeFreq.t,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude)
         
 
         if getEnergy(self.timeFreq.t, self.amplitude) == 0.0:
@@ -415,7 +414,7 @@ def plotFirstAndLastPulse(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nra
   plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
   #plt.yscale('log')
   
-  plt.legend()
+  plt.legend(bbox_to_anchor=(1.05,0.8))
   saveplot('first_and_last_pulse',**kwargs)
   plt.show()  
 
