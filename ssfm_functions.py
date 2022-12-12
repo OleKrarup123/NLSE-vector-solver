@@ -281,10 +281,19 @@ class ssfm_output_class:
       
 def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","cautious"),stepSafetyFactor=1.0):
     
-    Length_disp = input_signal.duration**2/np.abs(fiber.beta2)
-    Length_NL = 1/fiber.gamma/input_signal.Pmax   
-    testN=np.sqrt(Length_disp/Length_NL)
-
+    if fiber.beta2 != 0.0:
+        
+        Length_disp = input_signal.duration**2/np.abs(fiber.beta2)
+    else:
+        Length_disp=np.inf
+        
+    
+    if fiber.gamma !=0.0:
+        Length_NL = 1/fiber.gamma/input_signal.Pmax   
+        testN=np.sqrt(Length_disp/Length_NL)
+    else:
+        Length_NL=np.inf
+        testN=np.NaN
 
     Nmin = np.sqrt(0.25*np.exp(3/2)) #Minimum N-value of Optical Wave breaking with Gaussian pulse
     Length_wave_break = Length_disp/np.sqrt(testN**2/Nmin**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
@@ -419,9 +428,9 @@ def plotPulseMatrix2D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:
   z = zvals
   T, Z = np.meshgrid(t, z)
   P=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
-  P[P<1e-100]=np.NaN
+  P[P<1e-100]=1e-100
   P = 10*np.log10(P)
-  P[P<dB_cutoff]=np.NaN
+  P[P<dB_cutoff]=dB_cutoff
   surf=ax.contourf(T, Z, P,levels=40, cmap="jet")
   ax.set_xlabel('Time [ps]')
   ax.set_ylabel('Distance [m]')
