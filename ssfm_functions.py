@@ -243,6 +243,9 @@ def getZsteps( fiber:Fiber_class, input_signal:input_signal_class,stepmode,stepS
 
 class ssfm_output_class:
     def __init__(self, input_signal:input_signal_class, fiber:Fiber_class,zinfo):
+        
+        
+        
         self.zvals=zinfo[0]
         self.zsteps=zinfo[1]
         
@@ -265,6 +268,7 @@ class ssfm_output_class:
         self.pulseMatrix[0,:]=np.copy(input_signal.amplitude)   
         self.spectrumMatrix[0,:] = np.copy(input_signal.spectrum)
         
+        self.input_signal = input_signal
         self.fiber=fiber
         self.timeFreq=input_signal.timeFreq
 
@@ -394,101 +398,120 @@ def removePlots(filetypes):
           print("Removed:"+item)
           os.remove(item)
           
-def plotFirstAndLastPulse(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:int, dB_cutoff,**kwargs):
-  t=sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
+def plotFirstAndLastPulse(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
   
-  P_initial=getPower(matrix[0,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])
-  P_final=getPower(matrix[-1,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])
+    sim = ssfm_result.timeFreq
+    zvals=ssfm_result.zvals
+    matrix = ssfm_result.pulseMatrix 
+
+    t=sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
+
+    P_initial=getPower(matrix[0,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])
+    P_final=getPower(matrix[-1,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])
+
+
+    Pmax_initial = np.max(P_initial)
+    Pmax_final = np.max(P_final)
+    Pmax=np.max([Pmax_initial,Pmax_final])
+
+    plt.figure()
+    plt.title("Initial pulse and final pulse")
+    plt.plot(t,P_initial,label="Initial Pulse at z = 0")
+    plt.plot(t,P_final,label=f"Final Pulse at z = {zvals[-1]/1e3}km")
+    plt.xlabel("Time [ps]")
+    plt.ylabel("Power [W]")
+    plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
+    #plt.xlim(-2.5*ssfm_result.input_signal.duration*1e12,2.5*ssfm_result.input_signal.duration*1e12)
+    #plt.yscale('log')
+
+    plt.legend(bbox_to_anchor=(1.05,0.8))
+    saveplot('first_and_last_pulse',**kwargs)
+    plt.show()  
+
+
+def plotPulseMatrix2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
+    sim = ssfm_result.timeFreq
+    zvals=ssfm_result.zvals
+    matrix = ssfm_result.pulseMatrix 
+
+    #Plot pulse evolution throughout fiber in normalized log scale
+    fig, ax = plt.subplots()
+    ax.set_title('Pulse Evolution (dB scale)')
+    t = sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
+    z = zvals
+    T, Z = np.meshgrid(t, z)
+    P=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
+    P[P<1e-100]=1e-100
+    P = 10*np.log10(P)
+    P[P<dB_cutoff]=dB_cutoff
+    surf=ax.contourf(T, Z, P,levels=40, cmap="jet")
+    ax.set_xlabel('Time [ps]')
+    ax.set_ylabel('Distance [m]')
+    cbar=fig.colorbar(surf, ax=ax)
+    saveplot('pulse_evo_2D',**kwargs) 
+    plt.show()
+
+def plotPulseMatrix3D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
+    sim = ssfm_result.timeFreq
+    zvals=ssfm_result.zvals
+    matrix = ssfm_result.pulseMatrix 
   
-  
-  Pmax_initial = np.max(P_initial)
-  Pmax_final = np.max(P_final)
-  Pmax=np.max([Pmax_initial,Pmax_final])
- 
-  plt.figure()
-  plt.title("Initial pulse and final pulse")
-  plt.plot(t,P_initial,label="Initial Pulse at z = 0")
-  plt.plot(t,P_final,label=f"Final Pulse at z = {zvals[-1]/1e3}km")
-  plt.xlabel("Time [ps]")
-  plt.ylabel("Power [W]")
-  plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
-  #plt.yscale('log')
-  
-  plt.legend(bbox_to_anchor=(1.05,0.8))
-  saveplot('first_and_last_pulse',**kwargs)
-  plt.show()  
+    #Plot pulse evolution in 3D
+    fig, ax = plt.subplots(1,1, figsize=(10,7),subplot_kw={"projection": "3d"})
+    plt.title("Pulse Evolution (dB scale)")
+
+    t = sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
+    z = zvals
+    T_surf, Z_surf = np.meshgrid(t, z)
+    P_surf=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
+    P_surf[P_surf<1e-100]=1e-100
+    P_surf = 10*np.log10(P_surf)
+    P_surf[P_surf<dB_cutoff]=dB_cutoff
+    # Plot the surface.
+    surf = ax.plot_surface(T_surf, Z_surf, P_surf, cmap=cm.jet,
+                            linewidth=0, antialiased=False)
+    ax.set_xlabel('Time [ps]')
+    ax.set_ylabel('Distance [m]')
+    # Add a color bar which maps values to colors.
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    saveplot('pulse_evo_3D',**kwargs)
+    plt.show()
 
 
-def plotPulseMatrix2D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:int, dB_cutoff,**kwargs):
-  #Plot pulse evolution throughout fiber in normalized log scale
-  fig, ax = plt.subplots()
-  ax.set_title('Pulse Evolution (dB scale)')
-  t = sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
-  z = zvals
-  T, Z = np.meshgrid(t, z)
-  P=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
-  P[P<1e-100]=1e-100
-  P = 10*np.log10(P)
-  P[P<dB_cutoff]=dB_cutoff
-  surf=ax.contourf(T, Z, P,levels=40, cmap="jet")
-  ax.set_xlabel('Time [ps]')
-  ax.set_ylabel('Distance [m]')
-  cbar=fig.colorbar(surf, ax=ax)
-  saveplot('pulse_evo_2D',**kwargs) 
-  plt.show()
+def plotPulseChirp2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
+    
+    sim = ssfm_result.timeFreq
+    zvals=ssfm_result.zvals
+    matrix = ssfm_result.pulseMatrix   
 
-def plotPulseMatrix3D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:int, dB_cutoff,**kwargs):
-  #Plot pulse evolution in 3D
-  fig, ax = plt.subplots(1,1, figsize=(10,7),subplot_kw={"projection": "3d"})
-  plt.title("Pulse Evolution (dB scale)")
+    #Plot pulse evolution throughout fiber  in normalized log scale
+    fig, ax = plt.subplots()
+    ax.set_title('Pulse Chirp Evolution')
+    t = sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
+    z = zvals
+    T, Z = np.meshgrid(t, z)
+    
+    
+    Cmatrix=np.ones( (len(z),len(t))  )*1.0
 
-  t = sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
-  z = zvals
-  T_surf, Z_surf = np.meshgrid(t, z)
-  P_surf=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
-  P_surf[P_surf<1e-100]=1e-100
-  P_surf = 10*np.log10(P_surf)
-  P_surf[P_surf<dB_cutoff]=dB_cutoff
-  # Plot the surface.
-  surf = ax.plot_surface(T_surf, Z_surf, P_surf, cmap=cm.jet,
-                        linewidth=0, antialiased=False)
-  ax.set_xlabel('Time [ps]')
-  ax.set_ylabel('Distance [m]')
-  # Add a color bar which maps values to colors.
-  fig.colorbar(surf, shrink=0.5, aspect=5)
-  saveplot('pulse_evo_3D',**kwargs)
-  plt.show()
+    for i in range(len(zvals)):
+        Cmatrix[i,:]=getChirp(t/1e12,matrix[i,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])/1e9
 
 
-def plotPulseChirp2D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:int,**kwargs):
-  #Plot pulse evolution throughout fiber in normalized log scale
-  fig, ax = plt.subplots()
-  ax.set_title('Pulse Chirp Evolution')
-  t = sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
-  z = zvals
-  T, Z = np.meshgrid(t, z)
-  
-  
-  Cmatrix=np.ones( (len(z),len(t))  )*1.0
-
-  for i in range(len(zvals)):
-    Cmatrix[i,:]=getChirp(t/1e12,matrix[i,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])/1e9
+    for kw, value in kwargs.items():
+        if kw.lower()=='chirpplotrange' and type(value)==tuple:
+            Cmatrix[Cmatrix<value[0]]=value[0]
+            Cmatrix[Cmatrix>value[1]]=value[1]
 
 
-  for kw, value in kwargs.items():
-    if kw.lower()=='chirpplotrange' and type(value)==tuple:
-      Cmatrix[Cmatrix<value[0]]=value[0]
-      Cmatrix[Cmatrix>value[1]]=value[1]
-  
-
-  surf=ax.contourf(T, Z, Cmatrix,levels=40,cmap='RdBu')
-  
-  ax.set_xlabel('Time [ps]')
-  ax.set_ylabel('Distance [m]')
-  cbar=fig.colorbar(surf, ax=ax)
-  cbar.set_label('Chirp [GHz]')
-  saveplot('chirp_evo_2D',**kwargs) 
-  plt.show()
+    surf=ax.contourf(T, Z, Cmatrix,levels=40,cmap='RdBu')
+    
+    ax.set_xlabel('Time [ps]')
+    ax.set_ylabel('Distance [m]')
+    cbar=fig.colorbar(surf, ax=ax)
+    cbar.set_label('Chirp [GHz]')
+    saveplot('chirp_evo_2D',**kwargs) 
+    plt.show()
 
 
 def plotEverythingAboutPulses(ssfm_result:ssfm_output_class, 
@@ -499,10 +522,10 @@ def plotEverythingAboutPulses(ssfm_result:ssfm_output_class,
   
     
   print('  ')
-  plotFirstAndLastPulse(ssfm_result.pulseMatrix,ssfm_result.fiber,ssfm_result.timeFreq,ssfm_result.zvals, nrange, dB_cutoff,**kwargs)
-  plotPulseMatrix2D(ssfm_result.pulseMatrix,ssfm_result.fiber,ssfm_result.timeFreq,ssfm_result.zvals,nrange,dB_cutoff,**kwargs)
-  plotPulseChirp2D(ssfm_result.pulseMatrix,ssfm_result.fiber,ssfm_result.timeFreq,ssfm_result.zvals,nrange,**kwargs) 
-  plotPulseMatrix3D(ssfm_result.pulseMatrix,ssfm_result.fiber,ssfm_result.timeFreq,ssfm_result.zvals,nrange,dB_cutoff,**kwargs)
+  plotFirstAndLastPulse(ssfm_result, nrange, dB_cutoff,**kwargs)
+  plotPulseMatrix2D(ssfm_result,nrange,dB_cutoff,**kwargs)
+  plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
+  plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff,**kwargs)
   print('  ')  
 
 
