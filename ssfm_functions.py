@@ -7,6 +7,7 @@ Created on Fri Dec  9 10:23:48 2022
 
 import numpy as np
 from scipy.fftpack import fft, ifft, fftshift, ifftshift, fftfreq
+from scipy.signal import find_peaks
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -252,15 +253,15 @@ class ssfm_output_class:
         self.n_z_locs=len(zinfo[0])
         self.n_z_steps=len(zinfo[1])
         
-        plt.figure()
-        plt.title('zvals')
-        plt.plot(self.zvals,'.')
-        plt.show()
+        # plt.figure()
+        # plt.title('zvals')
+        # plt.plot(self.zvals,'.')
+        # plt.show()
         
-        plt.figure()
-        plt.title(f'zsteps {self.n_z_steps}')
-        plt.plot(self.zsteps,'.')
-        plt.show()        
+        # plt.figure()
+        # plt.title(f'zsteps {self.n_z_steps}')
+        # plt.plot(self.zsteps,'.')
+        # plt.show()        
         
         self.pulseMatrix = np.zeros((self.n_z_locs,input_signal.timeFreq.number_of_points ) )*(1+0j)
         self.spectrumMatrix = np.copy(self.pulseMatrix)
@@ -301,15 +302,15 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
     Nmin = np.sqrt(0.25*np.exp(3/2)) #Minimum N-value of Optical Wave breaking with Gaussian pulse
     Length_wave_break = Length_disp/np.sqrt(testN**2/Nmin**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
 
-    print(f"testN={testN}")
-    print(f"Length_disp={Length_disp/1e3}km")
-    print(f"Length_NL={Length_NL/1e3}km")
-    print(f"Length_wave_break = {Length_wave_break/1e3} km")
+    # print(f"testN={testN}")
+    # print(f"Length_disp={Length_disp/1e3}km")
+    # print(f"Length_NL={Length_NL/1e3}km")
+    # print(f"Length_wave_break = {Length_wave_break/1e3} km")
 
     
     
-    print("Calculating zinfo")
-    print(f"Stepmode = {stepConfig}, stepSafetyFactor = {stepSafetyFactor}")
+    # print("Calculating zinfo")
+    # print(f"Stepmode = {stepConfig}, stepSafetyFactor = {stepSafetyFactor}")
     if stepConfig[0].lower() == "fixed":
         
         if type(stepConfig[1]) == str:
@@ -334,7 +335,7 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
         zinfo = getZsteps(fiber,input_signal,stepConfig[1],stepSafetyFactor)
         
     
-    print(f"Running SSFM with nsteps = {len(zinfo[1])}")
+    # print(f"Running SSFM with nsteps = {len(zinfo[1])}")
     
     #Initialize arrays to store pulse and spectrum throughout fiber
     ssfm_result = ssfm_output_class(input_signal,fiber,zinfo)
@@ -409,22 +410,25 @@ def plotFirstAndLastPulse(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,*
     P_initial=getPower(matrix[0,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])
     P_final=getPower(matrix[-1,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])
 
+    peak_indices,_ = find_peaks(P_final,height=(0.15,10000),width = 4,distance=(30))    
 
     Pmax_initial = np.max(P_initial)
     Pmax_final = np.max(P_final)
     Pmax=np.max([Pmax_initial,Pmax_final])
 
-    plt.figure()
-    plt.title("Initial pulse and final pulse")
-    plt.plot(t,P_initial,label="Initial Pulse at z = 0")
-    plt.plot(t,P_final,label=f"Final Pulse at z = {zvals[-1]/1e3}km")
-    plt.xlabel("Time [ps]")
-    plt.ylabel("Power [W]")
-    plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
+    fig, ax = plt.subplots(dpi=300)
+    ax.set_title("Initial pulse and final pulse")
+    ax.plot(t,P_initial,label="Initial Pulse at z = 0")
+    ax.plot(t,P_final,label=f"Final Pulse at z = {zvals[-1]/1e3}km")
+    ax.plot(t[peak_indices],P_final[peak_indices],'r.',label="Final Pulse peaks")
+    
+    ax.set_xlabel("Time [ps]")
+    ax.set_ylabel("Power [W]")
+    ax.set_ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
     #plt.xlim(-2.5*ssfm_result.input_signal.duration*1e12,2.5*ssfm_result.input_signal.duration*1e12)
     #plt.yscale('log')
 
-    plt.legend(bbox_to_anchor=(1.05,0.8))
+    ax.legend(bbox_to_anchor=(1.05,0.8))
     saveplot('first_and_last_pulse',**kwargs)
     plt.show()  
 
