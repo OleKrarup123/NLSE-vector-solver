@@ -12,6 +12,14 @@ from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
+import os
+from IPython.lib.display import isdir
+
+import time
+from datetime import datetime
+
+import pickle
+
 global pi; pi=np.pi 
 
 
@@ -241,11 +249,12 @@ def getVariableZsteps( fiber:Fiber_class, input_signal:input_signal_class,stepmo
 
 
 
-
-class ssfm_output_class:
-    def __init__(self, input_signal:input_signal_class, fiber:Fiber_class,zinfo):
+class ssfm_input_info:
+    def __init__(self,input_signal:input_signal_class, fiber:Fiber_class,zinfo,experimentName,directories):
         
-        
+        self.experimentName = experimentName
+        self.base_dir = directories[0] #Base directory.
+        self.current_dir = directories[1] #Directory where output of this experiment is saved.
         
         self.zvals=zinfo[0]
         self.zsteps=zinfo[1]
@@ -253,25 +262,23 @@ class ssfm_output_class:
         self.n_z_locs=len(zinfo[0])
         self.n_z_steps=len(zinfo[1])
         
-        # plt.figure()
-        # plt.title('zvals')
-        # plt.plot(self.zvals,'.')
-        # plt.show()
+        self.input_signal = input_signal
+        self.fiber=fiber
+        self.timeFreq=input_signal.timeFreq
+
+class ssfm_output_class:
+    def __init__(self, input_signal:input_signal_class, fiber:Fiber_class,zinfo,experimentName,directories):
         
-        # plt.figure()
-        # plt.title(f'zsteps {self.n_z_steps}')
-        # plt.plot(self.zsteps,'.')
-        # plt.show()        
+        #Keep input info in separate class so we can save it without wasting several MB on the output pulse and spectrum
+        self.input_info=ssfm_input_info(input_signal, fiber,zinfo,experimentName,directories)
         
-        self.pulseMatrix = np.zeros((self.n_z_locs,input_signal.timeFreq.number_of_points ) )*(1+0j)
+        self.pulseMatrix = np.zeros((self.input_info.n_z_locs,input_signal.timeFreq.number_of_points ) )*(1+0j)
         self.spectrumMatrix = np.copy(self.pulseMatrix)
         
         self.pulseMatrix[0,:]=np.copy(input_signal.amplitude)   
         self.spectrumMatrix[0,:] = np.copy(input_signal.spectrum)
         
-        self.input_signal = input_signal
-        self.fiber=fiber
-        self.timeFreq=input_signal.timeFreq
+        
 
 
 
@@ -279,19 +286,28 @@ class ssfm_output_class:
 
 
 
-def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zinfo):    
+def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zinfo,experimentName,destination=None):    
+    
+    
+    print(' ### Characteristic parameters of fiber: ###', file = destination)
+    print(f'Fiber Length \t\t= {Length/1e3}km ', file = destination)
+    print(f'Fiber gamma \t\t= {fiber.gamma}/W/m ', file = destination)
+    print(f'Fiber beta2 \t\t= {fiber.beta2}s**2/m ', file = destination)
+    print(f'Fiber alpha_dB_per_m \t= {fiber.alpha_dB_per_m}', file = destination)
+    print(f'Fiber alpha_Np_per_m \t= {fiber.alpha_Np_per_m}', file = destination)
+    print(' ', file = destination)
     
     fig,ax=plt.subplots()
-    ax.set_title("Comparison of characteristic lengths")
+    ax.set_title("Comparison of characteristic lengths") 
     
     
-    print(' ### Characteristic parameters of simulation: ###')
-    print(f'  Length_fiber = {fiber.Length/1e3}km. Power loss coeff (alpha) = {fiber.alpha_dB_per_m*1e3:.4f} dB/km = {fiber.alpha_Np_per_m*1e3:.4f}Np/km ')
+    print(' ### Characteristic parameters of simulation: ###', file = destination)
+    print(f'  Length_fiber \t= {fiber.Length/1e3}km', file = destination)
     if fiber.alpha_Np_per_m == 0:
         L_eff = fiber.Length
     else:
         L_eff = (1-np.exp(-fiber.alpha_Np_per_m*fiber.Length))/fiber.alpha_Np_per_m
-    print(f"  L_eff = {L_eff/1e3:.4f} km")
+    print(f"  L_eff \t= {L_eff/1e3:.4f} km", file = destination)
     
     ax.barh("Fiber Length", fiber.Length/1e3, color ='C0')
     ax.barh("Effective Length", L_eff/1e3, color ='C1')
@@ -302,7 +318,7 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
         Length_disp = input_signal.duration**2/np.abs(fiber.beta2)
     else:
         Length_disp=np.inf
-    print(f"  Length_disp={Length_disp/1e3:.4f}km")  
+    print(f"  Length_disp \t= {Length_disp/1e3:.4f}km", file = destination)  
     
     ax.barh("Dispersion Length",Length_disp/1e3, color ='C2')
     
@@ -316,9 +332,9 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
     
     ax.barh("Nonlinear Length",Length_NL/1e3, color ='C3')
     
-    print(f"  Length_NL={Length_NL/1e3:.4f}km")
-    print(f"  N_soliton={N_soliton:.4f}")
-    print(f"  (N_soliton)^2={N_soliton**2:.4f}")
+    print(f"  Length_NL \t= {Length_NL/1e3:.4f}km", file = destination)
+    print(f"  N_soliton \t= {N_soliton:.4f}", file = destination)
+    print(f"  N_soliton^2 \t= {N_soliton**2:.4f}", file = destination)
 
 
     if fiber.beta2<0:
@@ -327,29 +343,29 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
         
         ax.barh("Soliton Length",z_soliton/1e3, color ='C4')
         
-        print(' ')
-        print(f'  sign(beta2) = {np.sign(fiber.beta2)}, so Solitons and Modulation Instability may occur ')
-        print(f"   z_soliton = {z_soliton/1e3:.4f}")
-        print(f"   N_soliton={N_soliton:.4f}")
-        print(f"   (N_soliton)^2={N_soliton**2:.4f}")
-        print(" ")
+        print(' ', file = destination)
+        print(f'  sign(beta2) \t= {np.sign(fiber.beta2)}, so Solitons and Modulation Instability may occur ', file = destination)
+        print(f"   z_soliton \t= {z_soliton/1e3:.4f}km", file = destination)
+        print(f"   N_soliton \t= {N_soliton:.4f}", file = destination)
+        print(f"   N_soliton^2 \t= {N_soliton**2:.4f}", file = destination)
+        print(" ", file = destination)
         
         # https://prefetch.eu/know/concept/modulational-instability/
         f_MI=np.sqrt(2*fiber.gamma*input_signal.Pmax/np.abs(fiber.beta2))/2/np.pi    
         gain_MI=2*fiber.gamma*input_signal.Pmax
-        print(f"   Freq. with max MI gain = {f_MI/1e9:.4f}GHz")
-        print(f"   Max MI gain = {gain_MI*1e3:.4f}/km ")
-        print(f"   Min MI distance = 1/gain_MI = Length_NL/2 = {1/(gain_MI*1e3):.4f}km ")
-        print(' ')
+        print(f"   Freq. w. max MI gain = {f_MI/1e9:.4f}GHz", file = destination)
+        print(f"   Max MI gain \t\t= {gain_MI*1e3:.4f}/km ", file = destination)
+        print(f"   Min MI gain distance = {1/(gain_MI*1e3):.4f}km ", file = destination)
+        print(' ', file = destination)
         ax.barh("MI gain Length",1/(gain_MI*1e3), color ='C5')
         
     elif fiber.beta2>0:           
         #https://prefetch.eu/know/concept/optical-wave-breaking/
         Nmin_OWB = np.sqrt(0.25*np.exp(3/2)) #Minimum N-value of Optical Wave breaking with Gaussian pulse
         Length_wave_break = Length_disp/np.sqrt(N_soliton**2/Nmin_OWB**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
-        print(' ')
-        print(f'  sign(beta2) = {np.sign(fiber.beta2)}, so Optical Wave Breaking may occur ')
-        print(f"   Length_wave_break = {Length_wave_break/1e3:.4f} km")    
+        print(' ', file = destination)
+        print(f'  sign(beta2) \t= {np.sign(fiber.beta2)}, so Optical Wave Breaking may occur ', file = destination)
+        print(f"   Length_wave_break \t= {Length_wave_break/1e3:.4f} km", file = destination)    
         ax.barh("OWB Length",Length_wave_break/1e3, color ='C6')
     
     ax.barh("Maximum $\Delta$z",np.max(zinfo[1])/1e3, color ='C7')
@@ -358,11 +374,18 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
         
     ax.set_xscale('log')
     ax.set_xlabel('Length [km]')
+    
+    if (experimentName != "NONE"):
+        plt.savefig('Length_chart.png', 
+                    bbox_inches ="tight",
+                    pad_inches = 1,
+                    orientation ='landscape')
+    
     plt.show()
     
     #End of describe_sim_parameters
 
-def getZsteps(fiber:Fiber_class,input_signal:input_signal_class,stepConfig_list):
+def getZsteps(fiber:Fiber_class,input_signal:input_signal_class,stepConfig_list,experimentName):
     
     stepMode=stepConfig_list[0]
     stepApproach=stepConfig_list[1]       
@@ -372,7 +395,7 @@ def getZsteps(fiber:Fiber_class,input_signal:input_signal_class,stepConfig_list)
     
     print(' ')
     print("Calculating zinfo")
-    print(f"Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
+    print(f"Stepmode = ({stepMode},{stepApproach}), stepSafetyFactor = {stepSafetyFactor}")
 
     if stepMode.lower() == "fixed":
         
@@ -400,43 +423,82 @@ def getZsteps(fiber:Fiber_class,input_signal:input_signal_class,stepConfig_list)
     else:
         zinfo = getVariableZsteps(fiber,input_signal,stepApproach,stepSafetyFactor)
         
-        fig,ax = plt.subplots()
-        ax.set_title(f"Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
-        ax.plot(zinfo[0]/1e3,'b.',label = f"z-locs ({len(zinfo[0])})")
+    fig,ax = plt.subplots()
+    ax.set_title(f"Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
+    ax.plot(zinfo[0]/1e3,'b.',label = f"z-locs ({len(zinfo[0])})")
 
-        ax.set_xlabel('Entry')
-        ax.set_ylabel('z-location [km]')
-        ax.tick_params(axis='y',labelcolor='b')
-        
-        ax2=ax.twinx()
-        ax2.plot(zinfo[1]/1e3,'r.',label = f"$\Delta$z-steps ({len(zinfo[1])})")
-        ax2.set_ylabel('$\Delta$z [km]')
-        ax2.tick_params(axis='y',labelcolor='r')
-        
-        fig.legend(bbox_to_anchor=(1.3,0.8))
-        plt.show()
+    ax.set_xlabel('Entry')
+    ax.set_ylabel('z-location [km]')
+    ax.tick_params(axis='y',labelcolor='b')
+    
+    ax2=ax.twinx()
+    ax2.plot(zinfo[1]/1e3,'r.',label = f"$\Delta$z-steps ({len(zinfo[1])})")
+    ax2.set_ylabel('$\Delta$z [km]')
+    ax2.tick_params(axis='y',labelcolor='r')
+    
+    fig.legend(bbox_to_anchor=(1.3,0.8))
+    
+    if (experimentName != "NONE"):
+        plt.savefig('Z-step_chart.png', 
+                    bbox_inches ="tight",
+                    pad_inches = 1,
+                    orientation ='landscape')
+    
+    plt.show()
     
     return zinfo
       
-def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","cautious",10.0)):
+
+
+def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","cautious",10.0),experimentName ="NONE"):
     
+    base_dir=os.getcwd()+'\\'
+    os.chdir(base_dir)
+    current_dir = "NONE"
+    
+    if experimentName != "NONE":
+        
+        current_time = datetime.now()
+        current_dir =base_dir+ f"Simulation Results\\{experimentName}\\{current_time.year}_{current_time.month}_{current_time.day}_{current_time.hour}_{current_time.minute}_{current_time.second}\\"
+        os.makedirs(current_dir)
+        os.chdir(current_dir)
+    
+    dirs = (base_dir,current_dir)
     print("########### Initializing SSFM!!! ###########")
     
     #Print info about timebase.
     input_signal.timeFreq.describe_config()    
     
-    #Get z-steps and dprint description.
-    zinfo = getZsteps(fiber,input_signal,stepConfig)
+    #Get z-steps and print description.
+    zinfo = getZsteps(fiber,input_signal,stepConfig,experimentName)
     
     #Print info about characteristic parameters such as L_eff, L_disp, L_NL etc. 
-    describe_sim_parameters(fiber,input_signal,zinfo)
+    describe_sim_parameters(fiber,input_signal,zinfo,experimentName)
     
     
     
     
     
     #Initialize arrays to store pulse and spectrum throughout fiber
-    ssfm_result = ssfm_output_class(input_signal,fiber,zinfo)
+    ssfm_result = ssfm_output_class(input_signal,fiber,zinfo,experimentName,dirs)
+
+    if experimentName != "NONE":
+        print("Saving ssfm_result to current folder using pickle")
+        
+        with open("ssfm_input.pickle", "wb") as file:
+            pickle.dump(ssfm_result.input_info,file)    
+    
+        with open("input_config_description.txt","w") as output_file:
+            
+            
+    
+            
+            
+            describe_sim_parameters(fiber,input_signal,zinfo,experimentName,destination=output_file)
+            
+            print(' ', file = output_file)
+            print(f"Stepmode = ({stepConfig[0]},{stepConfig[1]}), stepSafetyFactor = {stepConfig[2]}", file = output_file)
+            print(' ', file = output_file)
     
     print(f"Running SSFM with nsteps = {len(zinfo[1])}")
     
@@ -467,27 +529,30 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
 
     #Return results
     print("Finished running SSFM!!!")
+    
+
+    
+    os.chdir(ssfm_result.input_info.base_dir)
+    
+    
     return ssfm_result
 
 
 
 
 #Function for optionally saving plots
-def saveplot(basename,**kwargs):
-  for kw, value in kwargs.items():
-    if kw.lower()=='savename' and type(value)==str:
-      savestring=basename+'_'+value
-      if value.lower().endswith(('.pdf','.png','.jpg')) == False:
-        savestring+='.png'
-      plt.savefig(savestring,
-                  bbox_inches='tight', 
-                  transparent=True,
-                  pad_inches=0)
+def saveplot(basename):
+    if "NONE" in basename:
+        return
+    
+    if basename.lower().endswith(('.pdf','.png','.jpg')) == False:
+        basename+='.png'
+        
+    plt.savefig(basename, bbox_inches='tight', pad_inches=0)
 
 
 #Function for optionally deleting plots     
-import os
-from IPython.lib.display import isdir
+
 def removePlots(filetypes):
   dir_name = os.getcwd()
   filelist = os.listdir(dir_name)
@@ -503,8 +568,8 @@ def removePlots(filetypes):
           
 def plotFirstAndLastPulse(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
   
-    sim = ssfm_result.timeFreq
-    zvals=ssfm_result.zvals
+    sim = ssfm_result.input_info.timeFreq
+    zvals=ssfm_result.input_info.zvals
     matrix = ssfm_result.pulseMatrix 
 
     t=sim.t[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]*1e12
@@ -534,8 +599,8 @@ def plotFirstAndLastPulse(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,*
 
 
 def plotPulseMatrix2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
-    sim = ssfm_result.timeFreq
-    zvals=ssfm_result.zvals
+    sim = ssfm_result.input_info.timeFreq
+    zvals=ssfm_result.input_info.zvals
     matrix = ssfm_result.pulseMatrix 
 
     #Plot pulse evolution throughout fiber in normalized log scale
@@ -556,8 +621,8 @@ def plotPulseMatrix2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwa
     plt.show()
 
 def plotPulseMatrix3D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
-    sim = ssfm_result.timeFreq
-    zvals=ssfm_result.zvals
+    sim = ssfm_result.input_info.timeFreq
+    zvals=ssfm_result.input_info.zvals
     matrix = ssfm_result.pulseMatrix 
   
     #Plot pulse evolution in 3D
@@ -584,8 +649,8 @@ def plotPulseMatrix3D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwa
 
 def plotPulseChirp2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
     
-    sim = ssfm_result.timeFreq
-    zvals=ssfm_result.zvals
+    sim = ssfm_result.input_info.timeFreq
+    zvals=ssfm_result.input_info.zvals
     matrix = ssfm_result.pulseMatrix   
 
     #Plot pulse evolution throughout fiber  in normalized log scale
@@ -614,27 +679,37 @@ def plotPulseChirp2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwar
     ax.set_ylabel('Distance [m]')
     cbar=fig.colorbar(surf, ax=ax)
     cbar.set_label('Chirp [GHz]')
-    saveplot('chirp_evo_2D',**kwargs) 
+    saveplot('chirp_evo_2D') 
     plt.show()
 
 
 def plotEverythingAboutPulses(ssfm_result:ssfm_output_class, 
                               nrange:int, 
-                              dB_cutoff,
-                              **kwargs):
+                              dB_cutoff, **kwargs):
   
-  
+
     
-  print('  ')
-  plotFirstAndLastPulse(ssfm_result, nrange, dB_cutoff,**kwargs)
-  plotPulseMatrix2D(ssfm_result,nrange,dB_cutoff,**kwargs)
-  plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
-  plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff,**kwargs)
-  print('  ')  
+    if ( ssfm_result.input_info.experimentName != "NONE" ):
+          os.chdir(ssfm_result.input_info.current_dir)
 
 
-def plotFirstAndLastSpectrum(matrix,fiber:Fiber_class,sim:timeFreq_class, nrange:int, dB_cutoff,**kwargs):
+    print('  ')
+    plotFirstAndLastPulse(ssfm_result, nrange, dB_cutoff)
+    plotPulseMatrix2D(ssfm_result,nrange,dB_cutoff)
+    plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
+    plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff)
+    print('  ')
 
+    if (ssfm_result.input_info.experimentName != "NONE" ):
+        os.chdir(ssfm_result.input_info.base_dir)
+        
+
+
+def plotFirstAndLastSpectrum(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff):
+
+    matrix = ssfm_result.spectrumMatrix
+    sim = ssfm_result.input_info.timeFreq
+    
     P_initial=getPower(matrix[0,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])*1e9
     P_final=getPower(matrix[-1,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)])*1e9
     
@@ -653,48 +728,58 @@ def plotFirstAndLastSpectrum(matrix,fiber:Fiber_class,sim:timeFreq_class, nrange
     plt.yscale('log')
     plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
     plt.legend()
-    saveplot('first_and_last_spectrum',**kwargs)
+    saveplot('first_and_last_spectrum')
     plt.show()
 
-def plotSpectrumMatrix2D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:int, dB_cutoff,**kwargs):
-  #Plot pulse evolution throughout fiber in normalized log scale
-  fig, ax = plt.subplots()
-  ax.set_title('Spectrum Evolution (dB scale)')
-  f = sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e9 
-  z = zvals
-  F, Z = np.meshgrid(f, z)
-  Pf=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
-  Pf[Pf<1e-100]=1e-100
-  Pf = 10*np.log10(Pf)
-  Pf[Pf<dB_cutoff]=dB_cutoff
-  surf=ax.contourf(F, Z, Pf,levels=40)
-  ax.set_xlabel('Freq. [GHz]')
-  ax.set_ylabel('Distance [m]')
-  cbar=fig.colorbar(surf, ax=ax) 
-  saveplot('spectrum_evo_2D',**kwargs) 
-  plt.show()
+def plotSpectrumMatrix2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff):
+    
+    matrix = ssfm_result.spectrumMatrix
+    sim = ssfm_result.input_info.timeFreq
+    zvals = ssfm_result.input_info.zvals
+    
+    
+    #Plot pulse evolution throughout fiber in normalized log scale
+    fig, ax = plt.subplots()
+    ax.set_title('Spectrum Evolution (dB scale)')
+    f = sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e9 
+    z = zvals
+    F, Z = np.meshgrid(f, z)
+    Pf=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
+    Pf[Pf<1e-100]=1e-100
+    Pf = 10*np.log10(Pf)
+    Pf[Pf<dB_cutoff]=dB_cutoff
+    surf=ax.contourf(F, Z, Pf,levels=40)
+    ax.set_xlabel('Freq. [GHz]')
+    ax.set_ylabel('Distance [m]')
+    cbar=fig.colorbar(surf, ax=ax) 
+    saveplot('spectrum_evo_2D') 
+    plt.show()
 
-def plotSpectrumMatrix3D(matrix,fiber:Fiber_class,sim:timeFreq_class,zvals, nrange:int, dB_cutoff,**kwargs):
-  #Plot pulse evolution in 3D
-  fig, ax = plt.subplots(1,1, figsize=(10,7),subplot_kw={"projection": "3d"})
-  plt.title("Spectrum Evolution (dB scale)")
-
-  f = sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e9 
-  z = zvals
-  F_surf, Z_surf = np.meshgrid(f, z)
-  P_surf=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
-  P_surf[P_surf<1e-100]=1e-100
-  P_surf = 10*np.log10(P_surf)
-  P_surf[P_surf<dB_cutoff]=dB_cutoff
-  # Plot the surface.
-  surf = ax.plot_surface(F_surf, Z_surf, P_surf, cmap=cm.viridis,
-                        linewidth=0, antialiased=False)
-  ax.set_xlabel('Freq. [GHz]')
-  ax.set_ylabel('Distance [m]')
-  # Add a color bar which maps values to colors.
-  fig.colorbar(surf, shrink=0.5, aspect=5)
-  saveplot('spectrum_evo_3D',**kwargs) 
-  plt.show()
+def plotSpectrumMatrix3D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff):
+    matrix = ssfm_result.spectrumMatrix
+    sim = ssfm_result.input_info.timeFreq
+    zvals = ssfm_result.input_info.zvals
+    
+    #Plot pulse evolution in 3D
+    fig, ax = plt.subplots(1,1, figsize=(10,7),subplot_kw={"projection": "3d"})
+    plt.title("Spectrum Evolution (dB scale)")
+      
+    f = sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e9 
+    z = zvals
+    F_surf, Z_surf = np.meshgrid(f, z)
+    P_surf=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
+    P_surf[P_surf<1e-100]=1e-100
+    P_surf = 10*np.log10(P_surf)
+    P_surf[P_surf<dB_cutoff]=dB_cutoff
+    # Plot the surface.
+    surf = ax.plot_surface(F_surf, Z_surf, P_surf, cmap=cm.viridis,
+                          linewidth=0, antialiased=False)
+    ax.set_xlabel('Freq. [GHz]')
+    ax.set_ylabel('Distance [m]')
+    # Add a color bar which maps values to colors.
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    saveplot('spectrum_evo_3D') 
+    plt.show()
 
 
 def plotEverythingAboutSpectra(ssfm_result:ssfm_output_class,
@@ -702,17 +787,24 @@ def plotEverythingAboutSpectra(ssfm_result:ssfm_output_class,
                                dB_cutoff,
                                **kwargs):
   
-  print('  ')  
-  plotFirstAndLastSpectrum(ssfm_result.spectrumMatrix,ssfm_result.fiber,ssfm_result.timeFreq, nrange, dB_cutoff,**kwargs)
-  plotSpectrumMatrix2D(ssfm_result.spectrumMatrix,ssfm_result.fiber,ssfm_result.timeFreq,ssfm_result.zvals,nrange,dB_cutoff,**kwargs)
-  plotSpectrumMatrix3D(ssfm_result.spectrumMatrix,ssfm_result.fiber,ssfm_result.timeFreq,ssfm_result.zvals,nrange,dB_cutoff,**kwargs)
-  print('  ')  
+    if ( ssfm_result.input_info.experimentName != "NONE" ):
+          os.chdir(ssfm_result.input_info.current_dir)
+        
+    print('  ')  
+    plotFirstAndLastSpectrum(ssfm_result, nrange, dB_cutoff)
+    plotSpectrumMatrix2D(ssfm_result, nrange, dB_cutoff)
+    plotSpectrumMatrix3D(ssfm_result, nrange, dB_cutoff)
+    print('  ')  
 
-
+    if (ssfm_result.input_info.experimentName != "NONE" ):
+        os.chdir(ssfm_result.input_info.base_dir)
 
 
 
 if __name__ == "__main__":
+    
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+    
     
     N  = 2**15 #Number of points
     dt = 0.05e-12 #Time resolution [s] 
@@ -724,10 +816,10 @@ if __name__ == "__main__":
     Length          = 500      #Fiber length in m
     #nsteps          = 2**8     #Number of steps we divide the fiber into
     
-    gamma           = 100e-3     #Nonlinearity parameter in 1/W/m 
+    gamma           = 40e-3     #Nonlinearity parameter in 1/W/m 
     beta2           = -100e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
     beta2          *= (1e-30)  #Convert fs^2 to s^2 so everything is in SI units
-    alpha_dB_per_m  = 0.0e-3   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
+    alpha_dB_per_m  = 10.0e-3   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
     
     #Note:  beta2>0 is normal dispersion with red light pulling ahead, 
     #       causing a negative leading chirp
@@ -774,12 +866,13 @@ if __name__ == "__main__":
         testInputSignal.spectrum=getSpectrumFromPulse(testInputSignal.timeFreq.t, testInputSignal.amplitude)
     
     
-    testSafetyFactor = 100
-    testStepConfig=("fixed",2**10,testSafetyFactor)
+    testSafetyFactor = 1
+    testStepConfig=("fixed",2**8,testSafetyFactor)
     #testStepConfig=("fixed",2**10,testSafetyFactor)
     
+    testName="test2"
     #Run SSFM
-    ssfm_result_test = SSFM(fiber,testInputSignal,stepConfig=testStepConfig)
+    ssfm_result_test = SSFM(fiber,testInputSignal,stepConfig=testStepConfig,experimentName=testName)
     
     #Plot pulses
     nrange_test=600
