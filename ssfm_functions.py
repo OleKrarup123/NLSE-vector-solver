@@ -60,14 +60,14 @@ class timeFreq_class:
         
     def describe_config(self,destination = None):
         print(" ### timeFreq Configuration Parameters ###" , file = destination)
-        print(f"  Number of points = {self.number_of_points}", file = destination)
-        print(f"  Start time, tmin = {self.tmin*1e12:.3f}ps", file = destination)
-        print(f"  Stop time, tmax = {self.tmax*1e12:.3f}ps", file = destination)
-        print(f"  Time resolution, dt = {self.time_step*1e12:.3f}ps", file = destination)
+        print(f"  Number of points \t\t= {self.number_of_points}", file = destination)
+        print(f"  Start time, tmin \t\t= {self.tmin*1e12:.3f}ps", file = destination)
+        print(f"  Stop time, tmax \t\t= {self.tmax*1e12:.3f}ps", file = destination)
+        print(f"  Time resolution \t\t= {self.time_step*1e12:.3f}ps", file = destination)
         print("  ", file = destination)
-        print(f"  Start frequency= {self.fmin/1e12:.3f}THz", file = destination)
-        print(f"  Stop frequency = {self.fmax/1e12:.3f}THz", file = destination)
-        print(f"  Frequency resolution= {self.freq_step/1e6:.3f}MHz", file = destination)
+        print(f"  Start frequency\t\t= {self.fmin/1e12:.3f}THz", file = destination)
+        print(f"  Stop frequency \t\t= {self.fmax/1e12:.3f}THz", file = destination)
+        print(f"  Frequency resolution \t\t= {self.freq_step/1e6:.3f}MHz", file = destination)
         print( "   ", file = destination)
         
 
@@ -178,11 +178,11 @@ class Fiber_class:
       
     def describe_fiber(self,destination = None):
         print(' ### Characteristic parameters of fiber: ###', file = destination)
-        print(f'Fiber Length \t\t= {self.Length/1e3}km ', file = destination)
-        print(f'Fiber gamma \t\t= {self.gamma}/W/m ', file = destination)
-        print(f'Fiber beta2 \t\t= {self.beta2}s**2/m ', file = destination)
-        print(f'Fiber alpha_dB_per_m \t= {self.alpha_dB_per_m}', file = destination)
-        print(f'Fiber alpha_Np_per_m \t= {self.alpha_Np_per_m}', file = destination)
+        print(f'Fiber Length \t\t\t= {self.Length/1e3} \tkm ', file = destination)
+        print(f'Fiber gamma \t\t\t= {self.gamma}\t\t/W/m ', file = destination)
+        print(f'Fiber beta2 \t\t\t= {self.beta2}\t\ts**2/m ', file = destination)
+        print(f'Fiber alpha_dB_per_m \t\t= {self.alpha_dB_per_m} \t\tdB/m', file = destination)
+        print(f'Fiber alpha_Np_per_m \t\t= {self.alpha_Np_per_m} \t\tNp/m', file = destination)
         print(' ', file = destination)
       
 class input_signal_class:
@@ -211,14 +211,14 @@ class input_signal_class:
         
     def describe_input_signal(self,destination = None):
         print(" ### Input Signal Parameters ###" , file = destination)
-        print(f"  Pmax = {self.Pmax:.3f}W", file = destination)
-        print(f"  Duration = {self.duration*1e12:.3f}ps", file = destination)
-        print(f"  Offset = {self.offset*1e12:.3f}ps", file = destination)
-        print(f"  Chirp = {self.chirp:.3f}", file = destination)
-        print(f"  Carrier_freq = {self.carrier_freq_Hz/1e12}THz", file = destination)
-        print(f"  pulseType = {self.pulseType}", file = destination)
-        print(f"  order = {self.order}", file = destination)
-        print(f"  noiseAmplitude = {self.noiseAmplitude:.3f}sqrt(W)", file = destination)
+        print(f"  Pmax \t\t\t\t= {self.Pmax:.3f} W", file = destination)
+        print(f"  Duration \t\t\t= {self.duration*1e12:.3f} ps", file = destination)
+        print(f"  Offset \t\t\t= {self.offset*1e12:.3f} ps", file = destination)
+        print(f"  Chirp \t\t\t= {self.chirp:.3f}", file = destination)
+        print(f"  Carrier_freq \t\t\t= {self.carrier_freq_Hz/1e12} THz", file = destination)
+        print(f"  pulseType \t\t\t= {self.pulseType}", file = destination)
+        print(f"  order \t\t\t= {self.order}", file = destination)
+        print(f"  noiseAmplitude \t\t= {self.noiseAmplitude:.3f} sqrt(W)", file = destination)
         
         print( "   ", file = destination)
 
@@ -304,29 +304,102 @@ class ssfm_output_class:
         
 
 
+def getUnitsFromValue(value):
+    
+    logval=np.log10(value)
+    
+    scalingFactor = 1.0
+    prefix = ""
+    
+    if logval < -12:
+        scalingFactor=1e-15
+        prefix="f"
+        return  scalingFactor, prefix 
+    
+    if logval < -9:
+        scalingFactor=1e-12
+        prefix="p"
+        return  scalingFactor, prefix 
+
+    if logval < -6:
+        scalingFactor=1e-9
+        prefix="n"
+        return  scalingFactor, prefix 
+    
+    if logval < -3:
+        scalingFactor=1e-6
+        prefix="u"
+        return  scalingFactor, prefix 
 
 
+    if logval < -2:
+        scalingFactor=1e-3
+        prefix="m"
+        return  scalingFactor, prefix     
 
+    if logval < 0:
+        scalingFactor=1e-2
+        prefix="c"
+        return  scalingFactor, prefix 
+
+    if logval < 3:
+        scalingFactor=1e-0
+        prefix=""
+        return  scalingFactor, prefix 
+
+    if logval < 6:
+        scalingFactor=1e3
+        prefix="k"
+        return  scalingFactor, prefix 
+
+    if logval < 9:
+        scalingFactor=1e6
+        prefix="M"
+        return  scalingFactor, prefix 
+
+    if logval < 12:
+        scalingFactor=1e9
+        prefix="G"
+        return  scalingFactor, prefix 
+
+    if logval < 15:
+        scalingFactor=1e12
+        prefix="T"
+        return  scalingFactor, prefix 
+
+    if logval > 15:
+        scalingFactor=1e15
+        prefix="P"
+        return  scalingFactor, prefix 
+
+    
 
 
 def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zinfo,experimentName,destination=None):    
-     
+    
+    scalingfactor, prefix= getUnitsFromValue(fiber.Length)
+    
     if destination != None:
         fig,ax=plt.subplots()
         ax.set_title("Comparison of characteristic lengths") 
     
     
+    
+    
     print(' ### Characteristic parameters of simulation: ###', file = destination)
-    print(f'  Length_fiber \t= {fiber.Length/1e3}km', file = destination)
-    if fiber.alpha_Np_per_m == 0:
+    print(f'  Length_fiber \t= {fiber.Length/scalingfactor:.2e} {prefix}m', file = destination)
+    if fiber.alpha_Np_per_m == 0.0:
         L_eff = fiber.Length
     else:
         L_eff = (1-np.exp(-fiber.alpha_Np_per_m*fiber.Length))/fiber.alpha_Np_per_m
-    print(f"  L_eff \t= {L_eff/1e3:.4f} km", file = destination)
+    print(f"  L_eff       \t= {L_eff/scalingfactor:.2e} {prefix}m", file = destination)
     
     if destination != None:
-        ax.barh("Fiber Length", fiber.Length/1e3, color ='C0')
-        ax.barh("Effective Length", L_eff/1e3, color ='C1')
+        
+        
+        
+        ax.barh("Fiber Length", fiber.Length/scalingfactor, color ='C0')
+        ax.barh("Effective Length", L_eff/scalingfactor, color ='C1')
 
     
     
@@ -334,10 +407,10 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
         Length_disp = input_signal.duration**2/np.abs(fiber.beta2)
     else:
         Length_disp=np.inf
-    print(f"  Length_disp \t= {Length_disp/1e3:.4f}km", file = destination)  
+    print(f"  Length_disp \t= {Length_disp/scalingfactor:.2e} {prefix}m", file = destination)  
     
     if destination != None:
-        ax.barh("Dispersion Length",Length_disp/1e3, color ='C2')
+        ax.barh("Dispersion Length",Length_disp/scalingfactor, color ='C2')
     
     
     if fiber.gamma !=0.0:
@@ -348,11 +421,11 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
         N_soliton=np.NaN
     
     if destination != None:
-        ax.barh("Nonlinear Length",Length_NL/1e3, color ='C3')
+        ax.barh("Nonlinear Length",Length_NL/scalingfactor, color ='C3')
     
-    print(f"  Length_NL \t= {Length_NL/1e3:.4f}km", file = destination)
-    print(f"  N_soliton \t= {N_soliton:.4f}", file = destination)
-    print(f"  N_soliton^2 \t= {N_soliton**2:.4f}", file = destination)
+    print(f"  Length_NL \t= {Length_NL/scalingfactor:.2e} {prefix}m", file = destination)
+    print(f"  N_soliton \t= {N_soliton:.2e}", file = destination)
+    print(f"  N_soliton^2 \t= {N_soliton**2:.2e}", file = destination)
 
 
     if fiber.beta2<0:
@@ -360,44 +433,52 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
         z_soliton = pi/2*Length_disp
         
         if destination != None:
-            ax.barh("Soliton Length",z_soliton/1e3, color ='C4')
+            ax.barh("Soliton Length",z_soliton/scalingfactor, color ='C4')
         
         print(' ', file = destination)
         print(f'  sign(beta2) \t= {np.sign(fiber.beta2)}, so Solitons and Modulation Instability may occur ', file = destination)
-        print(f"   z_soliton \t= {z_soliton/1e3:.4f}km", file = destination)
-        print(f"   N_soliton \t= {N_soliton:.4f}", file = destination)
-        print(f"   N_soliton^2 \t= {N_soliton**2:.4f}", file = destination)
+        print(f"   z_soliton \t= {z_soliton/scalingfactor:.2e} {prefix}m", file = destination)
+        print(f"   N_soliton \t= {N_soliton:.2e}", file = destination)
+        print(f"   N_soliton^2 \t= {N_soliton**2:.2e}", file = destination)
+        
+
         print(" ", file = destination)
         
         # https://prefetch.eu/know/concept/modulational-instability/
         f_MI=np.sqrt(2*fiber.gamma*input_signal.Pmax/np.abs(fiber.beta2))/2/np.pi    
         gain_MI=2*fiber.gamma*input_signal.Pmax
-        print(f"   Freq. w. max MI gain = {f_MI/1e9:.4f}GHz", file = destination)
-        print(f"   Max MI gain \t\t= {gain_MI*1e3:.4f}/km ", file = destination)
-        print(f"   Min MI gain distance = {1/(gain_MI*1e3):.4f}km ", file = destination)
+        print(f"   Freq. w. max MI gain = {f_MI/1e9:.2e}GHz", file = destination)
+        print(f"   Max MI gain \t\t= {gain_MI*scalingfactor:.2e} /{prefix}m ", file = destination)
+        print(f"   Min MI gain distance = {1/(gain_MI*scalingfactor):.2e} {prefix}m ", file = destination)
         print(' ', file = destination)
         
         if destination != None:
-            ax.barh("MI gain Length",1/(gain_MI*1e3), color ='C5')
+            ax.barh("MI gain Length",1/(gain_MI*scalingfactor), color ='C5')
         
     elif fiber.beta2>0:           
         #https://prefetch.eu/know/concept/optical-wave-breaking/
-        Nmin_OWB = np.sqrt(0.25*np.exp(3/2)) #Minimum N-value of Optical Wave breaking with Gaussian pulse
-        Length_wave_break = Length_disp/np.sqrt(N_soliton**2/Nmin_OWB**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
-        print(' ', file = destination)
-        print(f'  sign(beta2) \t= {np.sign(fiber.beta2)}, so Optical Wave Breaking may occur ', file = destination)
-        print(f"   Length_wave_break \t= {Length_wave_break/1e3:.4f} km", file = destination)    
+        Nmin_OWB = np.exp(3/4)/2 #Minimum N-value of Optical Wave breaking with Gaussian pulse
         
+        N_ratio = N_soliton/Nmin_OWB
+
+        Length_wave_break = Length_disp/np.sqrt(N_soliton**2/Nmin_OWB**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
+    
+        print(' ', file = destination)
+        print(f'   sign(beta2) \t\t\t\t= {np.sign(fiber.beta2)}, so Optical Wave Breaking may occur ', file = destination)
+        print( "   Nmin_OWB (cst.) \t\t\t= 0.5*exp(3/4) (assuming Gaussian pulses)", file = destination)
+        print(f"   N_ratio = N_soliton/Nmin_OWB \t= {N_ratio:.2e}", file = destination)
+        print(f"   Length_wave_break \t\t\t= {Length_wave_break/scalingfactor:.2e} {prefix}m", file = destination)    
+    
         if destination != None:
-            ax.barh("OWB Length",Length_wave_break/1e3, color ='C6')
+            ax.barh("OWB Length",Length_wave_break/scalingfactor, color ='C6')
     
     if destination != None:
-        ax.barh("Maximum $\Delta$z",np.max(zinfo[1])/1e3, color ='C7')
-        ax.barh("Minimum $\Delta$z",np.min(zinfo[1])/1e3, color ='C8')
+        ax.barh("Maximum $\Delta$z",np.max(zinfo[1])/scalingfactor, color ='C7')
+        ax.barh("Minimum $\Delta$z",np.min(zinfo[1])/scalingfactor, color ='C8')
         
             
         ax.set_xscale('log')
-        ax.set_xlabel('Length [km]')
+        ax.set_xlabel(f'Length [{prefix}m]')
     
     
         plt.savefig('Length_chart.png', 
@@ -472,7 +553,7 @@ def getZsteps(fiber:Fiber_class,input_signal:input_signal_class,stepConfig_list,
       
 
 def describe_run( current_time, current_fiber:Fiber_class,  current_input_signal:input_signal_class,current_stepConfig, zinfo,experimentName  ,destination = None):
-
+    print(' ',file=destination)
     print('Time when run was started:', file = destination)
     print(current_time,file=destination)
     print(' ', file = destination)
@@ -638,10 +719,13 @@ def plotFirstAndLastPulse(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,*
     ax.set_ylabel("Power [W]")
     #ax.set_ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
     #plt.xlim(-2.5*ssfm_result.input_signal.duration*1e12,2.5*ssfm_result.input_signal.duration*1e12)
-    #plt.yscale('log')
+    
+    for kw, value in kwargs.items():
+        if kw.lower()=='firstandlastpulsescale' and value.lower()=='log':
+            ax.set_yscale('log')
 
     ax.legend(bbox_to_anchor=(1.05,0.8))
-    saveplot('first_and_last_pulse',**kwargs)
+    saveplot('first_and_last_pulse')
     plt.show()  
 
 
@@ -664,7 +748,7 @@ def plotPulseMatrix2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwa
     ax.set_xlabel('Time [ps]')
     ax.set_ylabel('Distance [m]')
     cbar=fig.colorbar(surf, ax=ax)
-    saveplot('pulse_evo_2D',**kwargs) 
+    saveplot('pulse_evo_2D') 
     plt.show()
 
 def plotPulseMatrix3D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwargs):
@@ -690,7 +774,7 @@ def plotPulseMatrix3D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,**kwa
     ax.set_ylabel('Distance [m]')
     # Add a color bar which maps values to colors.
     fig.colorbar(surf, shrink=0.5, aspect=5)
-    saveplot('pulse_evo_3D',**kwargs)
+    saveplot('pulse_evo_3D')
     plt.show()
 
 
@@ -741,9 +825,9 @@ def plotEverythingAboutPulses(ssfm_result:ssfm_output_class,
 
 
     print('  ')
-    plotFirstAndLastPulse(ssfm_result, nrange, dB_cutoff)
+    plotFirstAndLastPulse(ssfm_result, nrange, dB_cutoff,**kwargs)
     plotPulseMatrix2D(ssfm_result,nrange,dB_cutoff)
-    #plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
+    plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
     #plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff)
     print('  ')
 
@@ -851,18 +935,18 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     
     
-    N  = 2**16 #Number of points
-    dt = 1e-15 #Time resolution [s] 
+    N  = 2**12 #Number of points
+    dt = 100e-15 #Time resolution [s] 
     
     
     timeFreq_test=timeFreq_class(N,dt)
     
     #Define fiberulation parameters
-    Length          = 4e-3      #Fiber length in m
+    Length          = 5e-3      #Fiber length in m
     #nsteps          = 2**8     #Number of steps we divide the fiber into
     
-    gamma           = 1.5e-3/1e4     #Nonlinearity parameter in 1/W/m 
-    beta2           = 100e9    #Dispersion in fs^2/m (units typically used when referring to beta2) 
+    gamma           = 1e-3     #Nonlinearity parameter in 1/W/m 
+    beta2           = 100e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
     beta2          *= (1e-30)  #Convert fs^2 to s^2 so everything is in SI units
     alpha_dB_per_m  = 0   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
     
@@ -882,8 +966,8 @@ if __name__ == "__main__":
     #Initialize Gaussian pulse
 
     
-    testAmplitude = np.sqrt(0.2e12)                    #Amplitude in units of sqrt(W)
-    testDuration  =200e-15   #Pulse 1/e^2 duration [s]
+    testAmplitude = np.sqrt(10)                    #Amplitude in units of sqrt(W)
+    testDuration  =100*dt   #Pulse 1/e^2 duration [s]
     testOffset    = 0                       #Time offset
     testChirp = 0
     testCarrierFreq=0
@@ -917,20 +1001,20 @@ if __name__ == "__main__":
     testStepConfig=("fixed",2**10,testSafetyFactor)
     #testStepConfig=("fixed",2**10,testSafetyFactor)
     
-    testName="self_focusing"
+    testName="most_recent_run"
     #Run SSFM
     ssfm_result_test = SSFM(fiber,testInputSignal,stepConfig=testStepConfig,experimentName=testName)
     
-    # #Plot pulses
-    # nrange_test=5400
-    # cutoff_test=-30
-    # plotEverythingAboutPulses(ssfm_result_test,nrange_test,cutoff_test,chirpPlotRange=(-60,60))
+    #Plot pulses
+    nrange_test=800
+    cutoff_test=-30
+    plotEverythingAboutPulses(ssfm_result_test,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
     
  
-    # nrange_test=int((N-10)/2/4)
-    # cutoff_test=-60    
+    nrange_test=800
+    cutoff_test=-60    
     
-    # #Plot spectra
-    # plotEverythingAboutSpectra(ssfm_result_test,nrange_test,cutoff_test)
+    #Plot spectra
+    plotEverythingAboutSpectra(ssfm_result_test,nrange_test,cutoff_test)
 
 
