@@ -184,11 +184,27 @@ class Fiber_class:
         print(f'Fiber alpha_dB_per_m \t\t= {self.alpha_dB_per_m} \t\tdB/m', file = destination)
         print(f'Fiber alpha_Np_per_m \t\t= {self.alpha_Np_per_m} \t\tNp/m', file = destination)
         print(' ', file = destination)
-      
+
+
+class signal_parameters:
+
+    def __init__(self,Amax,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude)     :
+        self.Amax = Amax
+        self.Pmax= self.Amax**2
+        self.duration=duration
+        self.offset=offset
+        self.chirp=chirp
+        self.carrier_freq_Hz=carrier_freq_Hz
+        self.pulseType=pulseType
+        self.order=order
+        self.noiseAmplitude=noiseAmplitude
+
 class input_signal_class:
     def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
 
-        
+
+        self.signalParameters = signal_parameters( peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude   )        
+
         self.timeFreq=timeFreq
         self.amplitude = getPulse(self.timeFreq.t,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude)
         
@@ -198,27 +214,20 @@ class input_signal_class:
         else:
             self.spectrum = getSpectrumFromPulse(self.timeFreq.t,self.amplitude)   
         
-        self.Pmax=np.max(getPower(self.amplitude))
-        self.duration=duration
-        self.offset=offset
-        self.chirp=chirp
-        self.carrier_freq_Hz=carrier_freq_Hz
-        self.pulseType=pulseType
-        self.order=order
-        self.noiseAmplitude=noiseAmplitude
+        
         
         self.describe_input_signal()
         
     def describe_input_signal(self,destination = None):
         print(" ### Input Signal Parameters ###" , file = destination)
-        print(f"  Pmax \t\t\t\t= {self.Pmax:.3f} W", file = destination)
-        print(f"  Duration \t\t\t= {self.duration*1e12:.3f} ps", file = destination)
-        print(f"  Offset \t\t\t= {self.offset*1e12:.3f} ps", file = destination)
-        print(f"  Chirp \t\t\t= {self.chirp:.3f}", file = destination)
-        print(f"  Carrier_freq \t\t\t= {self.carrier_freq_Hz/1e12} THz", file = destination)
-        print(f"  pulseType \t\t\t= {self.pulseType}", file = destination)
-        print(f"  order \t\t\t= {self.order}", file = destination)
-        print(f"  noiseAmplitude \t\t= {self.noiseAmplitude:.3f} sqrt(W)", file = destination)
+        print(f"  Pmax \t\t\t\t= {self.signalParameters.Pmax:.3f} W", file = destination)
+        print(f"  Duration \t\t\t= {self.signalParameters.duration*1e12:.3f} ps", file = destination)
+        print(f"  Offset \t\t\t= {self.signalParameters.offset*1e12:.3f} ps", file = destination)
+        print(f"  Chirp \t\t\t= {self.signalParameters.chirp:.3f}", file = destination)
+        print(f"  Carrier_freq \t\t\t= {self.signalParameters.carrier_freq_Hz/1e12} THz", file = destination)
+        print(f"  pulseType \t\t\t= {self.signalParameters.pulseType}", file = destination)
+        print(f"  order \t\t\t= {self.signalParameters.order}", file = destination)
+        print(f"  noiseAmplitude \t\t= {self.signalParameters.noiseAmplitude:.3f} sqrt(W)", file = destination)
         
         print( "   ", file = destination)
 
@@ -234,10 +243,10 @@ def zstep_NL(z,fiber:Fiber_class, input_signal:input_signal_class,stepmode,stepS
     
     
     if stepmode.lower()=="cautious":
-        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.Pmax*input_signal.duration)**2*np.exp(2*fiber.alpha_Np_per_m*z)/stepSafetyFactor
+        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.signalParameters.Pmax*input_signal.signalParameters.duration)**2*np.exp(2*fiber.alpha_Np_per_m*z)/stepSafetyFactor
     
     if stepmode.lower()=="approx":
-        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.Pmax)**2/(input_signal.duration*input_signal.timeFreq.time_step)*np.exp(2*fiber.alpha_Np_per_m*z)/stepSafetyFactor    
+        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.signalParameters.Pmax)**2/(input_signal.signalParameters.duration*input_signal.timeFreq.time_step)*np.exp(2*fiber.alpha_Np_per_m*z)/stepSafetyFactor    
 
 
     else:
@@ -285,7 +294,8 @@ class ssfm_input_info:
         self.n_z_locs=len(zinfo[0])
         self.n_z_steps=len(zinfo[1])
         
-        self.input_signal = input_signal
+        self.signalParameters = input_signal.signalParameters
+           
         self.fiber=fiber
         self.timeFreq=input_signal.timeFreq
 
@@ -379,6 +389,11 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
     
     scalingfactor, prefix= getUnitsFromValue(fiber.Length)
     
+    #Ensure that we don't measure distances in Mm or Gm
+    if scalingfactor > 1e3:
+        scalingfactor = 1e3
+        prefix = 'k'
+    
     if destination != None:
         fig,ax=plt.subplots()
         ax.set_title("Comparison of characteristic lengths") 
@@ -404,7 +419,7 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
     
     
     if fiber.beta2 != 0.0:
-        Length_disp = input_signal.duration**2/np.abs(fiber.beta2)
+        Length_disp = input_signal.signalParameters.duration**2/np.abs(fiber.beta2)
     else:
         Length_disp=np.inf
     print(f"  Length_disp \t= {Length_disp/scalingfactor:.2e} {prefix}m", file = destination)  
@@ -414,7 +429,7 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
     
     
     if fiber.gamma !=0.0:
-        Length_NL = 1/fiber.gamma/input_signal.Pmax   
+        Length_NL = 1/fiber.gamma/input_signal.signalParameters.Pmax   
         N_soliton=np.sqrt(Length_disp/Length_NL)
     else:
         Length_NL=np.inf
@@ -445,8 +460,8 @@ def describe_sim_parameters(fiber:Fiber_class,input_signal:input_signal_class,zi
         print(" ", file = destination)
         
         # https://prefetch.eu/know/concept/modulational-instability/
-        f_MI=np.sqrt(2*fiber.gamma*input_signal.Pmax/np.abs(fiber.beta2))/2/np.pi    
-        gain_MI=2*fiber.gamma*input_signal.Pmax
+        f_MI=np.sqrt(2*fiber.gamma*input_signal.signalParameters.Pmax/np.abs(fiber.beta2))/2/np.pi    
+        gain_MI=2*fiber.gamma*input_signal.signalParameters.Pmax
         print(f"   Freq. w. max MI gain = {f_MI/1e9:.2e}GHz", file = destination)
         print(f"   Max MI gain \t\t= {gain_MI*scalingfactor:.2e} /{prefix}m ", file = destination)
         print(f"   Min MI gain distance = {1/(gain_MI*scalingfactor):.2e} {prefix}m ", file = destination)
@@ -617,8 +632,8 @@ def SSFM(fiber:Fiber_class,input_signal:input_signal_class,stepConfig=("fixed","
     
     print("Saving SSFM input to current folder using the 'pickle' library")
     
-    with open("ssfm_input.pickle", "wb") as file:
-        pickle.dump(ssfm_result.input_info,file)    
+    with open("ssfm_input.pickle", "wb") as pickle_file:
+        pickle.dump(ssfm_result.input_info,pickle_file)    
 
     with open("input_config_description.txt","w") as output_file:
             #Print info to terminal
@@ -828,7 +843,7 @@ def plotEverythingAboutPulses(ssfm_result:ssfm_output_class,
     plotFirstAndLastPulse(ssfm_result, nrange, dB_cutoff,**kwargs)
     plotPulseMatrix2D(ssfm_result,nrange,dB_cutoff)
     plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
-    #plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff)
+    plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff)
     print('  ')
 
     
@@ -923,7 +938,7 @@ def plotEverythingAboutSpectra(ssfm_result:ssfm_output_class,
     print('  ')  
     plotFirstAndLastSpectrum(ssfm_result, nrange, dB_cutoff)
     plotSpectrumMatrix2D(ssfm_result, nrange, dB_cutoff)
-    #plotSpectrumMatrix3D(ssfm_result, nrange, dB_cutoff)
+    plotSpectrumMatrix3D(ssfm_result, nrange, dB_cutoff)
     print('  ')  
 
     os.chdir(ssfm_result.input_info.base_dir)
@@ -942,11 +957,11 @@ if __name__ == "__main__":
     timeFreq_test=timeFreq_class(N,dt)
     
     #Define fiberulation parameters
-    Length          = 5e-3      #Fiber length in m
+    Length          = 1e3      #Fiber length in m
     #nsteps          = 2**8     #Number of steps we divide the fiber into
     
     gamma           = 1e-3     #Nonlinearity parameter in 1/W/m 
-    beta2           = 100e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
+    beta2           = 300e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
     beta2          *= (1e-30)  #Convert fs^2 to s^2 so everything is in SI units
     alpha_dB_per_m  = 0   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
     
@@ -1011,7 +1026,7 @@ if __name__ == "__main__":
     plotEverythingAboutPulses(ssfm_result_test,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
     
  
-    nrange_test=800
+    nrange_test=300
     cutoff_test=-60    
     
     #Plot spectra
