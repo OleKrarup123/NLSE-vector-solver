@@ -485,9 +485,12 @@ def describe_run( current_time, current_fiber:Fiber_class,  current_input_signal
     
     print('Info about input signal:', file = destination)
     current_input_signal.describe_input_signal(destination=destination)
-
-
     print(' ', file = destination)
+    
+    print("Info about fiber",file = destination )
+    current_fiber.describe_fiber(destination = destination)
+    print(' ', file = destination)
+    
     
     describe_sim_parameters(current_fiber,current_input_signal,zinfo,experimentName,destination=destination)
     
@@ -633,7 +636,7 @@ def plotFirstAndLastPulse(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff,*
     
     ax.set_xlabel("Time [ps]")
     ax.set_ylabel("Power [W]")
-    ax.set_ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
+    #ax.set_ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
     #plt.xlim(-2.5*ssfm_result.input_signal.duration*1e12,2.5*ssfm_result.input_signal.duration*1e12)
     #plt.yscale('log')
 
@@ -740,8 +743,8 @@ def plotEverythingAboutPulses(ssfm_result:ssfm_output_class,
     print('  ')
     plotFirstAndLastPulse(ssfm_result, nrange, dB_cutoff)
     plotPulseMatrix2D(ssfm_result,nrange,dB_cutoff)
-    plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
-    plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff)
+    #plotPulseChirp2D(ssfm_result,nrange,dB_cutoff,**kwargs) 
+    #plotPulseMatrix3D(ssfm_result,nrange,dB_cutoff)
     print('  ')
 
     
@@ -762,12 +765,12 @@ def plotFirstAndLastSpectrum(ssfm_result:ssfm_output_class, nrange:int, dB_cutof
     Pmax_final = np.max(P_final)
     Pmax=np.max([Pmax_initial,Pmax_final]) 
 
-    f=sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e9
+    f=sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e12
     plt.figure()
     plt.title("Initial spectrum and final spectrum")
     plt.plot(f,P_initial,label="Initial Spectrum")
     plt.plot(f,P_final,label="Final Spectrum")
-    plt.xlabel("Freq. [GHz]")
+    plt.xlabel("Freq. [THz]")
     plt.ylabel("PSD [W/GHz]")
     plt.yscale('log')
     plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
@@ -785,7 +788,7 @@ def plotSpectrumMatrix2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff):
     #Plot pulse evolution throughout fiber in normalized log scale
     fig, ax = plt.subplots()
     ax.set_title('Spectrum Evolution (dB scale)')
-    f = sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e9 
+    f = sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e12 
     z = zvals
     F, Z = np.meshgrid(f, z)
     Pf=getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]  )/np.max(getPower(matrix[:,int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]))
@@ -793,7 +796,7 @@ def plotSpectrumMatrix2D(ssfm_result:ssfm_output_class, nrange:int, dB_cutoff):
     Pf = 10*np.log10(Pf)
     Pf[Pf<dB_cutoff]=dB_cutoff
     surf=ax.contourf(F, Z, Pf,levels=40)
-    ax.set_xlabel('Freq. [GHz]')
+    ax.set_xlabel('Freq. [THz]')
     ax.set_ylabel('Distance [m]')
     cbar=fig.colorbar(surf, ax=ax) 
     saveplot('spectrum_evo_2D') 
@@ -836,7 +839,7 @@ def plotEverythingAboutSpectra(ssfm_result:ssfm_output_class,
     print('  ')  
     plotFirstAndLastSpectrum(ssfm_result, nrange, dB_cutoff)
     plotSpectrumMatrix2D(ssfm_result, nrange, dB_cutoff)
-    plotSpectrumMatrix3D(ssfm_result, nrange, dB_cutoff)
+    #plotSpectrumMatrix3D(ssfm_result, nrange, dB_cutoff)
     print('  ')  
 
     os.chdir(ssfm_result.input_info.base_dir)
@@ -848,20 +851,20 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     
     
-    N  = 2**15 #Number of points
-    dt = 0.05e-12 #Time resolution [s] 
+    N  = 2**16 #Number of points
+    dt = 1e-15 #Time resolution [s] 
     
     
     timeFreq_test=timeFreq_class(N,dt)
     
     #Define fiberulation parameters
-    Length          = 500      #Fiber length in m
+    Length          = 4e-3      #Fiber length in m
     #nsteps          = 2**8     #Number of steps we divide the fiber into
     
-    gamma           = 40e-3     #Nonlinearity parameter in 1/W/m 
-    beta2           = 100e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
+    gamma           = 1.5e-3/1e4     #Nonlinearity parameter in 1/W/m 
+    beta2           = 100e9    #Dispersion in fs^2/m (units typically used when referring to beta2) 
     beta2          *= (1e-30)  #Convert fs^2 to s^2 so everything is in SI units
-    alpha_dB_per_m  = 10.0e-3   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
+    alpha_dB_per_m  = 0   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
     
     #Note:  beta2>0 is normal dispersion with red light pulling ahead, 
     #       causing a negative leading chirp
@@ -869,22 +872,24 @@ if __name__ == "__main__":
     #       beta2<0 is anormalous dispersion with blue light pulling ahead, 
     #       causing a positive leading chirp.
     
+    fiber=Fiber_class(Length, gamma, beta2, alpha_dB_per_m)
       
     #  Initialize class
-    fiber=Fiber_class(Length, gamma, beta2, alpha_dB_per_m)
-    
+    fiber_disp_positive = Fiber_class(1, 1e-50,  200e8,   0.0   )
+    fiber_gain          = Fiber_class(20,1e-50,      0, -100.0e-2)
+    fiber_disp_negative = Fiber_class(1, 1e-50, -200e8,   0.0   )
     
     #Initialize Gaussian pulse
 
     
-    testAmplitude = np.sqrt(1)                    #Amplitude in units of sqrt(W)
-    testDuration  =1000*timeFreq_test.time_step   #Pulse 1/e^2 duration [s]
+    testAmplitude = np.sqrt(0.2e12)                    #Amplitude in units of sqrt(W)
+    testDuration  =200e-15   #Pulse 1/e^2 duration [s]
     testOffset    = 0                       #Time offset
     testChirp = 0
     testCarrierFreq=0
     testPulseType='gaussian' 
     testOrder = 1
-    testNoiseAmplitude = 1e-3
+    testNoiseAmplitude = 0.0
     
 
     testInputSignal = input_signal_class(timeFreq_test, 
@@ -909,23 +914,23 @@ if __name__ == "__main__":
     
     
     testSafetyFactor = 1
-    testStepConfig=("fixed",2**8,testSafetyFactor)
+    testStepConfig=("fixed",2**10,testSafetyFactor)
     #testStepConfig=("fixed",2**10,testSafetyFactor)
     
-    testName="test2"
+    testName="self_focusing"
     #Run SSFM
-    ssfm_result_test = SSFM(fiber,testInputSignal,stepConfig=testStepConfig)
+    ssfm_result_test = SSFM(fiber,testInputSignal,stepConfig=testStepConfig,experimentName=testName)
     
-    #Plot pulses
-    nrange_test=600
-    cutoff_test=-30
-    plotEverythingAboutPulses(ssfm_result_test,nrange_test,cutoff_test,chirpPlotRange=(-60,60))
+    # #Plot pulses
+    # nrange_test=5400
+    # cutoff_test=-30
+    # plotEverythingAboutPulses(ssfm_result_test,nrange_test,cutoff_test,chirpPlotRange=(-60,60))
     
  
-    nrange_test=400
-    cutoff_test=-60    
+    # nrange_test=int((N-10)/2/4)
+    # cutoff_test=-60    
     
-    #Plot spectra
-    plotEverythingAboutSpectra(ssfm_result_test,nrange_test,cutoff_test)
+    # #Plot spectra
+    # plotEverythingAboutSpectra(ssfm_result_test,nrange_test,cutoff_test)
 
 
