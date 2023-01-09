@@ -82,7 +82,21 @@ class timeFreq_class:
         timeFreq_df.to_csv("timeFreq.csv")  
         
     
+
+def load_timeFreq(path:str):
+    
+    
+    
+    
+    df = pd.read_csv(path+'\\timeFreq.csv')
+    number_of_points = df['number_of_points']
+    dt_s = df['dt_s']
+    
+    return timeFreq_class(int(number_of_points[0]), dt_s[0])
+    
+
         
+
 #Function returns pulse power or spectrum PSD
 def getPower(amplitude):
     return np.abs(amplitude)**2  
@@ -216,9 +230,21 @@ class fiber_span_class:
         fiber_df.to_csv("Fiber_span.csv")
 
     
-        
-        
-
+def load_fiber_span(path:str):
+    
+    df = pd.read_csv(path+'\\Fiber_span.csv')
+    Length_m = df['Length_m']
+    gamma_per_W_per_m = df['gamma_per_W_per_m']
+    beta2_s2_per_m = df['beta2_s2_per_m']
+    alpha_dB_per_m = df['alpha_dB_per_m']
+    
+    
+    fiber_list=[]
+    
+    for i in range(len(Length_m)):   
+        fiber_list.append( fiber_class(  Length_m[i], gamma_per_W_per_m[i], beta2_s2_per_m[i], alpha_dB_per_m[i] ) )    
+    
+    return fiber_span_class(fiber_list)
 
 
 class input_signal_class:
@@ -306,7 +332,40 @@ class input_signal_class:
             custom_input_df.to_csv("Custom_input_signal.csv")
       
         
+def load_InputSignal(path):    
+
+    
+    #Open dataframe with pulse parameters
+    df = pd.read_csv(path+'\\Input_signal.csv')
+    
+    Amax_sqrt_W             = df['Amax_sqrt(W)'][0]
+    duration_s              = df['duration_s'][0]
+    offset_s                = df['offset_s'][0]
+    chirp                   = df['chirp'][0]
+    carrier_freq_Hz         = df['carrier_freq_Hz'][0]
+    pulseType               = df['pulseType'][0]
+    order                   = int(df['order'][0])
+    noiseAmplitude_sqrt_W   = df['noiseAmplitude_sqrt(W)'][0]
+    
+    #Load timeFreq 
+    timeFreq = load_timeFreq( path )
+    
+    #Initialize class for loaded signal
+    loaded_input_signal = input_signal_class(timeFreq,Amax_sqrt_W,duration_s,offset_s,chirp,carrier_freq_Hz,pulseType,order, noiseAmplitude_sqrt_W)
+    
+    #If signal type is "custom", load the raw amplitude values
+    if pulseType == "custom":
+        df_custom = pd.read_csv( path + '\\Custom_input_signal.csv' )
         
+        A_real = np.array(df_custom["amplitude_sqrt_W_real"])
+        A_imag = np.array(df_custom["amplitude_sqrt_W_imag"])
+        A = A_real+1j*A_imag
+        
+        loaded_input_signal.amplitude = A
+        
+    
+    return loaded_input_signal  
+
 
 def zstep_NL(z,fiber:fiber_class, input_signal:input_signal_class,stepmode,stepSafetyFactor):
     
@@ -619,7 +678,8 @@ def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,
             dz_array = np.diff( z_array)
             
             
-        elif type(stepApproach) == int:
+        else:
+            stepApproach=int(stepApproach)
             z_array=np.linspace(0,fiber.Length,stepApproach+1)
             dz_array=np.ones( stepApproach)*(z_array[1]-z_array[0])            
 
@@ -725,9 +785,47 @@ def createOutputDirectory(experimentName):
 
 
 
+def saveStepConfig(stepConfig):
+
+    #Initialize dataframe
+    stepConfig_df = pd.DataFrame(columns=['stepmode',
+                                      'stepNumber_or_stepApproach',
+                                      'SafetyFactor'])
+                                     
+     
+    
+    #Fill it with values
+    stepConfig_df.loc[  len(stepConfig_df.index) ] = [stepConfig[0],
+                                                      stepConfig[1],
+                                                      stepConfig[2]]
+    #Export dataframe to .csv file
+    stepConfig_df.to_csv("stepConfig.csv")        
+
+
+
+def load_StepConfig(path):
+    
+    df = pd.read_csv(path+'\\stepConfig.csv')
+    
+    stepmode = df['stepmode'][0]
+    stepNumber_or_stepApproach = df['stepNumber_or_stepApproach'][0]
+    SafetyFactor = df['SafetyFactor'][0]
+    
+    return (stepmode,stepNumber_or_stepApproach,SafetyFactor)
+    
     
 
-
+def load_previous_run(basePath):
+    
+    print(f"Loading run in {basePath}")
+    
+    fiber_span      = load_fiber_span(basePath+'\\input_info\\')
+    input_signal    = load_InputSignal(basePath+'\\input_info\\')
+    stepConfig      = load_StepConfig( basePath+'\\input_info\\')
+    
+    print(f"Successfully loaded run in {basePath}")
+    
+    return fiber_span, input_signal, stepConfig
 
 
 def SSFM(fiber_span:fiber_span_class,input_signal:input_signal_class,stepConfig=("fixed","cautious",10.0),experimentName ="most_recent_run"):
@@ -751,6 +849,10 @@ def SSFM(fiber_span:fiber_span_class,input_signal:input_signal_class,stepConfig=
     
     #Save input signal parameters
     input_signal.saveInputSignal()
+    
+    saveStepConfig(stepConfig)
+    
+    
     
     #Return to main output directory
     os.chdir(current_dir)
@@ -1316,54 +1418,54 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     
     
-    N  = 2**14 #Number of points
-    dt = 100e-15 #Time resolution [s] 
+    # N  = 2**14 #Number of points
+    # dt = 100e-15 #Time resolution [s] 
     
     
-    timeFreq_test=timeFreq_class(N,dt)
+    # timeFreq_test=timeFreq_class(N,dt)
     
-    testAmplitude = np.sqrt(1e3)                    #Amplitude in units of sqrt(W)
-    testDuration  =100*dt   #Pulse 1/e^2 duration [s]
-    testOffset    = 0                       #Time offset
-    testChirp = 0
-    testCarrierFreq=0
-    testPulseType='gaussian' 
-    testOrder = 1
-    testNoiseAmplitude = 0
+    # testAmplitude = np.sqrt(1e3)                    #Amplitude in units of sqrt(W)
+    # testDuration  =100*dt   #Pulse 1/e^2 duration [s]
+    # testOffset    = 0                       #Time offset
+    # testChirp = 0
+    # testCarrierFreq=0
+    # testPulseType='gaussian' 
+    # testOrder = 1
+    # testNoiseAmplitude = 0
     
 
-    testInputSignal = input_signal_class(timeFreq_test, 
-                                         testAmplitude ,
-                                         testDuration,
-                                         testOffset,
-                                         testChirp,
-                                         testCarrierFreq,
-                                         testPulseType,
-                                         testOrder,
-                                         testNoiseAmplitude)
+    # testInputSignal = input_signal_class(timeFreq_test, 
+    #                                      testAmplitude ,
+    #                                      testDuration,
+    #                                      testOffset,
+    #                                      testChirp,
+    #                                      testCarrierFreq,
+    #                                      testPulseType,
+    #                                      testOrder,
+    #                                      testNoiseAmplitude)
     
     
     
       
-    #  Initialize class
+    # #  Initialize class
     
-    fiber_disp_positive = fiber_class(1000, 1e-100,   300e3*1e-30,    3e-10  )
-    fiber_gain          = fiber_class(1000, 1e-100,           0.0,   -0.01e0 )
-    fiber_disp_negative = fiber_class(1000, 1e-100,  -300e3*1e-30,    3e-10  )
-    
-    
-    # fiber_disp_positive = fiber_class(1, 1e-50,  200e8,   0.0   )
-    # fiber_gain          = fiber_class(20,1e-50,      0, -100.0e-2)
-    # fiber_disp_negative = fiber_class(1, 1e-50, -200e8,   0.0   )
-    
-    #
-    
-    fiber_list_CPA = [fiber_disp_positive, fiber_gain,fiber_disp_negative]
-    fiber_span_CPA = fiber_span_class(fiber_list_CPA)
+    # fiber_disp_positive = fiber_class(1000, 1e-100,   300e3*1e-30,    3e-10  )
+    # fiber_gain          = fiber_class(1000, 1e-100,           0.0,   -0.01e0 )
+    # fiber_disp_negative = fiber_class(1000, 1e-100,  -300e3*1e-30,    3e-10  )
     
     
+    # # fiber_disp_positive = fiber_class(1, 1e-50,  200e8,   0.0   )
+    # # fiber_gain          = fiber_class(20,1e-50,      0, -100.0e-2)
+    # # fiber_disp_negative = fiber_class(1, 1e-50, -200e8,   0.0   )
     
-    #Initialize Gaussian pulse
+    # #
+    
+    # fiber_list_CPA = [fiber_disp_positive, fiber_gain,fiber_disp_negative]
+    # fiber_span_CPA = fiber_span_class(fiber_list_CPA)
+    
+    
+    
+    # #Initialize Gaussian pulse
 
     
     
@@ -1371,14 +1473,16 @@ if __name__ == "__main__":
 
 
     
-    testSafetyFactor = 10
-    testStepConfig=("fixed",2**8,testSafetyFactor)
+    # testSafetyFactor = 10
+    # testStepConfig=("fixed",2**8,testSafetyFactor)
     #testStepConfig=("fixed",2**10,testSafetyFactor)
     #https://python.tutorialink.com/attributeerror-when-reading-a-pickle-file/
 
-    expName = 'CPA_new'
+    loadPath='C:\\Users\\okrarup\\OneDrive - Ciena Corporation\\Desktop\\SSFM folder\\NLSE-vector-solver\\Simulation Results\\CPA_loaded\\2023_1_9_11_17_58'
+    fiber_span_loaded, input_signal_loaded, stepConfig_loaded = load_previous_run(loadPath)
+    expName = 'CPA_loaded_test'
     #Run SSFM
-    ssfm_result_list_CPA = SSFM(fiber_span_CPA,testInputSignal,stepConfig=testStepConfig,experimentName=expName)
+    ssfm_result_list_CPA = SSFM(fiber_span_loaded,input_signal_loaded,stepConfig=stepConfig_loaded,experimentName=expName)
     
     
     
@@ -1387,7 +1491,7 @@ if __name__ == "__main__":
     cutoff_test=-60
     plotEverythingAboutPulses(ssfm_result_list_CPA,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
     
-    makeChirpGif(ssfm_result_list_CPA,framerate=30)
+    # makeChirpGif(ssfm_result_list_CPA,framerate=30)
     
     
     
@@ -1395,21 +1499,21 @@ if __name__ == "__main__":
     
     
     
-    testInputSignal_gain_only = input_signal_class(timeFreq_test, 
-                                         testAmplitude ,
-                                         testDuration,
-                                         testOffset,
-                                         testChirp,
-                                         testCarrierFreq,
-                                         testPulseType,
-                                         testOrder,
-                                         testNoiseAmplitude)
+    # testInputSignal_gain_only = input_signal_class(timeFreq_test, 
+    #                                      testAmplitude ,
+    #                                      testDuration,
+    #                                      testOffset,
+    #                                      testChirp,
+    #                                      testCarrierFreq,
+    #                                      testPulseType,
+    #                                      testOrder,
+    #                                      testNoiseAmplitude)
     
-    fiber_span_gain_only = fiber_span_class( [fiber_gain] )
-    ssfm_result_list_gain_only = SSFM(fiber_span_gain_only,testInputSignal_gain_only,stepConfig=testStepConfig,experimentName='gainOnly')
-    plotEverythingAboutPulses(ssfm_result_list_gain_only,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
+    # fiber_span_gain_only = fiber_span_class( [fiber_gain] )
+    # ssfm_result_list_gain_only = SSFM(fiber_span_gain_only,testInputSignal_gain_only,stepConfig=testStepConfig,experimentName='gainOnly')
+    # plotEverythingAboutPulses(ssfm_result_list_gain_only,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
     
-    makeChirpGif_gain_only(ssfm_result_list_gain_only,framerate=30)
+    # makeChirpGif_gain_only(ssfm_result_list_gain_only,framerate=30)
  
     # nrange_test=300
     # cutoff_test=-60    
