@@ -7,7 +7,7 @@ Created on Fri Dec  9 10:23:48 2022
 
 import numpy as np
 from scipy.fftpack import fft, ifft, fftshift, ifftshift, fftfreq
-from scipy.signal import find_peaks
+
 
 import pandas as pd
 
@@ -15,12 +15,9 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 import os
-from IPython.lib.display import isdir
 
-import time
 from datetime import datetime
 
-import pickle
 
 global pi; pi=np.pi 
 
@@ -105,8 +102,6 @@ def getPower(amplitude):
 def getEnergy(time_or_frequency,amplitude):
     return np.trapz(getPower(amplitude),time_or_frequency)
 
-#TODO: Add support for different carrier frequencies. Hint: Multiply by complex exponential!
-#TODO: Add support for pre-chirped pulses. 
 def GaussianPulse(time,amplitude,duration,offset,chirp,order,carrier_freq_Hz):
     assert 1 <= order, f"Error: Order of gaussian pulse is {order}. Must be >=1"
     return amplitude*np.exp(- (1+1j*chirp)/2*((time-offset)/(duration))**(2*np.floor(order)))*np.exp(-1j*2*pi*carrier_freq_Hz*time)
@@ -519,7 +514,7 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
         prefix = 'k'
     
     if destination != None:
-        fig,ax=plt.subplots()
+        fig,ax=plt.subplots(dpi=200)
         ax.set_title(f" Fiber Index = {fiber_index} \nComparison of characteristic lengths") 
     
     
@@ -692,7 +687,7 @@ def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,
     else:
         zinfo = getVariableZsteps(fiber,input_signal,stepApproach,stepSafetyFactor)
         
-    fig,ax = plt.subplots()
+    fig,ax = plt.subplots(dpi=200)
     ax.set_title(f"Fiber number = {fiber_index}, \n Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
     ax.plot(zinfo[0]/1e3,'b.',label = f"z-locs ({len(zinfo[0])})")
 
@@ -971,7 +966,7 @@ def unpackZvals(ssfm_result_list):
         
     return zvals
 
-def unpackMatrix(ssfm_result_list,zvals,timeFreq):
+def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
     
     matrix=np.zeros( ( len(zvals), len(  timeFreq.t )  ) )*(1+0j)
     
@@ -979,16 +974,24 @@ def unpackMatrix(ssfm_result_list,zvals,timeFreq):
     number_of_fibers = len(ssfm_result_list)
     for i, ssfm_result in enumerate(ssfm_result_list):
         
+        if pulse_or_spectrum.lower()=="pulse":
+            sourceMatrix = ssfm_result.pulseMatrix
+        elif pulse_or_spectrum.lower()=="spectrum":
+            sourceMatrix = ssfm_result.spectrumMatrix
+        else:
+            print("ERROR: Please set pulse_or_spectrum to either 'pulse' or 'spectrum'!!!")
+            return
+        
         if i==0:
-            matrix[0: len(ssfm_result.zinfo[0])-1, :] = ssfm_result.pulseMatrix[0: len(ssfm_result.zinfo[0])-1, :]
+            matrix[0: len(ssfm_result.zinfo[0])-1, :] = sourceMatrix[0: len(ssfm_result.zinfo[0])-1, :]
             
         elif  (i>0) and (i< number_of_fibers-1):
 
-            matrix[starting_row : starting_row + len(ssfm_result.zinfo[0])-1, :] = ssfm_result.pulseMatrix[0: len(ssfm_result.zinfo[0])-1, :]
+            matrix[starting_row : starting_row + len(ssfm_result.zinfo[0])-1, :] = sourceMatrix[0: len(ssfm_result.zinfo[0])-1, :]
 
         elif i==number_of_fibers-1:
 
-            matrix[starting_row : starting_row + len(ssfm_result.zinfo[0]), :] = ssfm_result.pulseMatrix[0:len(ssfm_result.zinfo[0]), :]
+            matrix[starting_row : starting_row + len(ssfm_result.zinfo[0]), :] = sourceMatrix[0:len(ssfm_result.zinfo[0]), :]
 
         starting_row +=len(ssfm_result.zinfo[0])-1
     
@@ -1004,11 +1007,14 @@ def plotFirstAndLastPulse(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
 
     P_initial=getPower(ssfm_result_list[0].pulseMatrix[0,int(timeFreq.number_of_points/2-nrange):int(timeFreq.number_of_points/2+nrange)])
     P_final=getPower(ssfm_result_list[-1].pulseMatrix[-1,int(timeFreq.number_of_points/2-nrange):int(timeFreq.number_of_points/2+nrange)])
-
-    fig, ax = plt.subplots(dpi=300)
+    
+    scalingFactor,prefix=getUnitsFromValue(np.max(zvals))
+    
+    
+    fig, ax = plt.subplots(dpi=200)
     ax.set_title("Initial pulse and final pulse")
-    ax.plot(t,P_initial,label="Initial Pulse at z = 0")
-    ax.plot(t,P_final,label=f"Final Pulse at z = {zvals[-1]/1e3}km")
+    ax.plot(t,P_initial,label=f"Initial Pulse at z = 0{prefix}m")
+    ax.plot(t,P_final,label=f"Final Pulse at z = {zvals[-1]/scalingFactor}{prefix}m")
     
     ax.set_xlabel("Time [ps]")
     ax.set_ylabel("Power [W]")
@@ -1018,7 +1024,7 @@ def plotFirstAndLastPulse(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
         if kw.lower()=='firstandlastpulsescale' and value.lower()=='log':
             ax.set_yscale('log')
 
-    ax.legend(bbox_to_anchor=(1.05,0.8))
+    ax.legend(bbox_to_anchor=(1.15,0.8))
     saveplot('first_and_last_pulse')
     plt.show()  
 
@@ -1029,11 +1035,11 @@ def plotPulseMatrix2D(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
          
     zvals = unpackZvals(ssfm_result_list)
     
-    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq)
+    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"pulse")
     
 
     #Plot pulse evolution throughout fiber in normalized log scale
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(dpi=200)
     ax.set_title('Pulse Evolution (dB scale)')
     t = timeFreq.t[int(timeFreq.number_of_points/2-nrange):int(timeFreq.number_of_points/2+nrange)]*1e12
     z = zvals
@@ -1053,7 +1059,7 @@ def plotPulseMatrix3D(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
    
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
-    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq)
+    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"pulse")
   
     #Plot pulse evolution in 3D
     fig, ax = plt.subplots(1,1, figsize=(10,7),subplot_kw={"projection": "3d"})
@@ -1081,10 +1087,10 @@ def plotPulseChirp2D(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
-    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq)
+    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"pulse")
 
     #Plot pulse evolution throughout fiber  in normalized log scale
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(dpi=200)
     ax.set_title('Pulse Chirp Evolution')
     t = timeFreq.t[int(timeFreq.number_of_points/2-nrange):int(timeFreq.number_of_points/2+nrange)]*1e12
     z = zvals
@@ -1154,15 +1160,17 @@ def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
 
     f=sim.f[int(sim.number_of_points/2-nrange):int(sim.number_of_points/2+nrange)]/1e12
     
-    plt.figure()
-    plt.title("Initial spectrum and final spectrum")
-    plt.plot(f,P_initial,label=f"Initial Spectrum at {zvals[0]}")
-    plt.plot(f,P_final,label=f"Final Spectrum at {zvals[-1]}")
-    plt.xlabel("Freq. [THz]")
-    plt.ylabel("PSD [W/GHz]")
-    plt.yscale('log')
-    plt.ylim(Pmax/(10**(-dB_cutoff/10)),1.05*Pmax)
-    plt.legend()
+    scalingFactor,prefix=getUnitsFromValue(np.max(zvals))
+    
+    fig,ax = plt.subplots(dpi=200)
+    ax.set_title("Initial spectrum and final spectrum")
+    ax.plot(f,P_initial,label=f"Initial Spectrum at {zvals[0]}{prefix}m")
+    ax.plot(f,P_final,label=f"Final Spectrum at {zvals[-1]/scalingFactor}{prefix}m")
+    ax.set_xlabel("Freq. [THz]")
+    ax.set_ylabel("PSD [W/GHz]")
+    ax.set_yscale('log')
+    ax.set_ylim(Pmax/(10**(-dB_cutoff/10)),2*Pmax)
+    fig.legend(bbox_to_anchor=(0.95,0.8))
     saveplot('first_and_last_spectrum')
     plt.show()
 
@@ -1170,11 +1178,11 @@ def plotSpectrumMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
-    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq)
+    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"spectrum")
     
     
     #Plot pulse evolution throughout fiber in normalized log scale
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(dpi=200)
     ax.set_title('Spectrum Evolution (dB scale)')
     f = timeFreq.f[int(timeFreq.number_of_points/2-nrange):int(timeFreq.number_of_points/2+nrange)]/1e12 
     z = zvals
@@ -1194,7 +1202,7 @@ def plotSpectrumMatrix3D(ssfm_result_list, nrange:int, dB_cutoff):
     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
-    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq)
+    matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"spectrum")
     
     #Plot pulse evolution in 3D
     fig, ax = plt.subplots(1,1, figsize=(10,7),subplot_kw={"projection": "3d"})
@@ -1242,15 +1250,22 @@ from matplotlib.colors import LinearSegmentedColormap
 
 def makeChirpGif(ssfm_result_list,framerate=30):
     
+    print("Making .gif anination of pulse evolution. This may take a while, so please be patient.")
+    
     os.chdir(ssfm_result_list[0].dirs[1])
+    
+    print(f"The .gif animation will be saved in {os.getcwd()}")
     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
     matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq)
-    
+    scalingFactor, letter =  getUnitsFromValue(np.max(zvals))
     
     points = np.array( [timeFreq.t*1e12 ,  getPower(matrix[len(zvals)-1,:])   ]  ).T.reshape(-1,1,2)
     segments = np.concatenate([points[0:-1],points[1:]],axis=1)
+    
+    
+    
     
     #Make custom colormap
     colors = ["red" ,"gray", "blue"]
@@ -1274,7 +1289,7 @@ def makeChirpGif(ssfm_result_list,framerate=30):
       
     
       ax.set_xlim([-ssfm_result_list[0].input_signal.duration *2.5*1e12,ssfm_result_list[0].input_signal.duration*2.5*1e12])
-      ax.set_ylim([0,1.05e4])
+      ax.set_ylim([0,1.05*Pmax])
       
       ax.set_xlabel('Time [ps]')
       ax.set_ylabel('Power [W]')
@@ -1282,10 +1297,8 @@ def makeChirpGif(ssfm_result_list,framerate=30):
     def update(i):
       ax.clear() #Clear figure 
       init()     #Reset axes
-      ax.set_title(f'Pulse evolution, CPA, z = {np.round(zvals[i]/1e3,1)}km')
+      ax.set_title(f'Pulse evolution, z = {np.round(zvals[i]/scalingFactor,1)}{letter}m')
       
-      if 1e3<zvals[i] and zvals[i]<2e3:
-          ax.hlines(3.8e3,-60,60,'r' )
       #Make collection of points from pulse power
       points = np.array( [timeFreq.t*1e12 ,  getPower(matrix[i,:])   ]  ).T.reshape(-1,1,2)
       
@@ -1308,232 +1321,91 @@ def makeChirpGif(ssfm_result_list,framerate=30):
     #Save animation as .gif
 
     writer = PillowWriter(fps=framerate)
-    ani.save(f'CPA_gif_fps={framerate}.gif',writer=writer)
+    ani.save(f'{ssfm_result_list[0].experimentName}_fps={framerate}.gif',writer=writer)
 
     os.chdir(ssfm_result_list[0].dirs[0])
 
 
-def makeChirpGif_gain_only(ssfm_result_list,framerate=30):
-    
-    os.chdir(ssfm_result_list[0].dirs[1])
-    
+
+def makeWaveletPlot(ssfm_result_list, nrange:int):
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
+    
     zvals = unpackZvals(ssfm_result_list)
+    
     matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq)
     
     
-    points = np.array( [timeFreq.t*1e12 ,  getPower(matrix[len(zvals)-1,:])   ]  ).T.reshape(-1,1,2)
-    segments = np.concatenate([points[0:-1],points[1:]],axis=1)
     
-    #Make custom colormap
-    colors = ["red" ,"gray", "blue"]
-    cmap1 = LinearSegmentedColormap.from_list("mycmap", colors)
-    
-    #Initialize color normalization function
-    norm = plt.Normalize(-20,20)
-    
-    #Initialize line collection to be plotted
-    lc=LineCollection(segments,cmap=cmap1,norm=norm)
-    lc.set_array( getChirp(timeFreq.t,matrix[len(zvals)-1,:])/1e9 )
-    
-    #Initialize figure
-    fig, ax = plt.subplots(dpi=150)
-    line = ax.add_collection(lc)
-    fig.colorbar(line,ax=ax, label = 'Chirp [GHz]')
-    
-    Pmax = np.max( np.abs(matrix) )**2
-    #Function for specifying axes
-    def init():
-      
-    
-      ax.set_xlim([-ssfm_result_list[0].input_signal.duration *2.5*1e12,ssfm_result_list[0].input_signal.duration*2.5*1e12])
-      ax.set_ylim([0,1.05e4])
-      
-      ax.set_xlabel('Time [ps]')
-      ax.set_ylabel('Power [W]')
-    #Function for updating the plot in the .gif
-    def update(i):
-      ax.clear() #Clear figure 
-      init()     #Reset axes
-      
-      #if 1e3<zvals[i] and zvals[i]<2e3:
-      ax.hlines(3.8e3,-60,60,'r' )
-      dt_flag = False
-      Pmax_current = np.max(getPower(matrix[i,:]))
-      ztitle = zvals[i]
-      dt_i=0
-      
-      if Pmax_current>3.8e3:
-          
-          if dt_flag == False:
-              dt_i = np.copy(i)
-              
-              dt_flag = True
-              dt_trace = getPower(matrix[dt_i,:])
-              
-          ztitle = zvals[dt_i]  
-          #Make collection of points from pulse power
-          points = np.array( [timeFreq.t*1e12 , dt_trace   ]  ).T.reshape(-1,1,2)
-          
-          #Make collection of lines from points
-          segments = np.concatenate([points[0:-1],points[1:]],axis=1)
-          lc=LineCollection(segments,cmap=cmap1,norm=norm)
-        
-          #Activate norm function based on local chirp
-          lc.set_array( getChirp(timeFreq.t,matrix[i,:])/1e9 )
-          
-          #Plot line
-          line = ax.add_collection(lc)
-      
-    
-      else:
-          #Make collection of points from pulse power
-          points = np.array( [timeFreq.t*1e12 ,  getPower(matrix[i,:])   ]  ).T.reshape(-1,1,2)
-          
-          #Make collection of lines from points
-          segments = np.concatenate([points[0:-1],points[1:]],axis=1)
-          lc=LineCollection(segments,cmap=cmap1,norm=norm)
-        
-          #Activate norm function based on local chirp
-          lc.set_array( getChirp(timeFreq.t,matrix[i,:])/1e9 )
-          
-          #Plot line
-          line = ax.add_collection(lc)
-          
-      ax.set_title(f'Pulse evolution, Gain only, z = {np.round( ztitle/1e3,1)}km')
-        
-    #Make animation
-    ani = FuncAnimation(fig,update,range(len(zvals)),init_func=init)
-    plt.show()
-    
-    #Save animation as .gif
 
-    writer = PillowWriter(fps=framerate)
-    ani.save(f'gain_only_gif_fps={framerate}.gif',writer=writer)
-
-    os.chdir(ssfm_result_list[0].dirs[0])
 
 if __name__ == "__main__":
     
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     
     
-    # N  = 2**14 #Number of points
-    # dt = 100e-15 #Time resolution [s] 
+    N  = 2**14 #Number of points
+    dt = 100e-15 #Time resolution [s] 
     
     
-    # timeFreq_test=timeFreq_class(N,dt)
+    timeFreq_test=timeFreq_class(N,dt)
     
-    # testAmplitude = np.sqrt(1e3)                    #Amplitude in units of sqrt(W)
-    # testDuration  =100*dt   #Pulse 1/e^2 duration [s]
-    # testOffset    = 0                       #Time offset
-    # testChirp = 0
-    # testCarrierFreq=0
-    # testPulseType='gaussian' 
-    # testOrder = 1
-    # testNoiseAmplitude = 0
+    testAmplitude = np.sqrt(1e3)                    #Amplitude in units of sqrt(W)
+    testDuration  =100*dt   #Pulse 1/e^2 duration [s]
+    testOffset    = 0                       #Time offset
+    testChirp = 0
+    testCarrierFreq=0
+    testPulseType='gaussian' 
+    testOrder = 1
+    testNoiseAmplitude = 0
     
 
-    # testInputSignal = input_signal_class(timeFreq_test, 
-    #                                      testAmplitude ,
-    #                                      testDuration,
-    #                                      testOffset,
-    #                                      testChirp,
-    #                                      testCarrierFreq,
-    #                                      testPulseType,
-    #                                      testOrder,
-    #                                      testNoiseAmplitude)
+    testInputSignal = input_signal_class(timeFreq_test, 
+                                          testAmplitude ,
+                                          testDuration,
+                                          testOffset,
+                                          testChirp,
+                                          testCarrierFreq,
+                                          testPulseType,
+                                          testOrder,
+                                          testNoiseAmplitude)
     
     
     
       
-    # #  Initialize class
-    
-    # fiber_disp_positive = fiber_class(1000, 1e-100,   300e3*1e-30,    3e-10  )
-    # fiber_gain          = fiber_class(1000, 1e-100,           0.0,   -0.01e0 )
-    # fiber_disp_negative = fiber_class(1000, 1e-100,  -300e3*1e-30,    3e-10  )
-    
-    
-    # # fiber_disp_positive = fiber_class(1, 1e-50,  200e8,   0.0   )
-    # # fiber_gain          = fiber_class(20,1e-50,      0, -100.0e-2)
-    # # fiber_disp_negative = fiber_class(1, 1e-50, -200e8,   0.0   )
-    
-    # #
-    
-    # fiber_list_CPA = [fiber_disp_positive, fiber_gain,fiber_disp_negative]
-    # fiber_span_CPA = fiber_span_class(fiber_list_CPA)
-    
-    
-    
-    # #Initialize Gaussian pulse
-
-    
+    #  Initialize fibers
+    fiber_disp_positive = fiber_class(1000, 1e-100,   300e3*1e-30,    0  )
+    fiber_list = [fiber_disp_positive]
+    fiber_span = fiber_span_class(fiber_list)
     
     
 
-
     
-    # testSafetyFactor = 10
-    # testStepConfig=("fixed",2**8,testSafetyFactor)
-    #testStepConfig=("fixed",2**10,testSafetyFactor)
-    #https://python.tutorialink.com/attributeerror-when-reading-a-pickle-file/
+    testSafetyFactor = 10
+    testStepConfig=("fixed",2**8,testSafetyFactor)
 
-    loadPath='C:\\Users\\okrarup\\OneDrive - Ciena Corporation\\Desktop\\SSFM folder\\NLSE-vector-solver\\Simulation Results\\CPA_loaded\\2023_1_9_11_17_58'
-    fiber_span_loaded, input_signal_loaded, stepConfig_loaded = load_previous_run(loadPath)
-    expName = 'CPA_loaded_test'
+
+
+
+    expName = 'PositiveDispersion'
     #Run SSFM
-    ssfm_result_list_CPA = SSFM(fiber_span_loaded,input_signal_loaded,stepConfig=stepConfig_loaded,experimentName=expName)
+    ssfm_result_list = SSFM(fiber_span,testInputSignal,stepConfig=testStepConfig,experimentName=expName)
     
     
     
     #Plot pulses
     nrange_test=800
     cutoff_test=-60
-    plotEverythingAboutPulses(ssfm_result_list_CPA,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
+    plotEverythingAboutPulses(ssfm_result_list,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
     
-    # makeChirpGif(ssfm_result_list_CPA,framerate=30)
-    
-    
-    
-    
-    
+    #Plot pulses
+    nrange_test=800
+    cutoff_test=-60
+    plotEverythingAboutSpectra(ssfm_result_list,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastSpectrumScale='lin')
     
     
-    # testInputSignal_gain_only = input_signal_class(timeFreq_test, 
-    #                                      testAmplitude ,
-    #                                      testDuration,
-    #                                      testOffset,
-    #                                      testChirp,
-    #                                      testCarrierFreq,
-    #                                      testPulseType,
-    #                                      testOrder,
-    #                                      testNoiseAmplitude)
     
-    # fiber_span_gain_only = fiber_span_class( [fiber_gain] )
-    # ssfm_result_list_gain_only = SSFM(fiber_span_gain_only,testInputSignal_gain_only,stepConfig=testStepConfig,experimentName='gainOnly')
-    # plotEverythingAboutPulses(ssfm_result_list_gain_only,nrange_test,cutoff_test,chirpPlotRange=(-60,60),firstAndLastPulseScale='lin')
     
-    # makeChirpGif_gain_only(ssfm_result_list_gain_only,framerate=30)
- 
-    # nrange_test=300
-    # cutoff_test=-60    
     
-    # #Plot spectra
-    # plotEverythingAboutSpectra(ssfm_result_list_CPA,nrange_test,cutoff_test)
-
-#Define fiberulation parameters
-#Length          = 1e3      #Fiber length in m
-#nsteps          = 2**8     #Number of steps we divide the fiber into
-
-#gamma           = 1e-3     #Nonlinearity parameter in 1/W/m 
-#beta2           = 300e3    #Dispersion in fs^2/m (units typically used when referring to beta2) 
-#beta2          *= (1e-30)  #Convert fs^2 to s^2 so everything is in SI units
-#alpha_dB_per_m  = 0   #Power attenuation coeff in decibel per m. Usual value at 1550nm is 0.2 dB/km
-
-#Note:  beta2>0 is normal dispersion with red light pulling ahead, 
-#       causing a negative leading chirp
-#       
-#       beta2<0 is anormalous dispersion with blue light pulling ahead, 
-#       causing a positive leading chirp.
-
-#fiber=fiber_class(Length, gamma, beta2, alpha_dB_per_m)
+    
+    
+    
