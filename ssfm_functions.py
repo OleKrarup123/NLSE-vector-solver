@@ -437,6 +437,8 @@ class fiber_class:
 class fiber_span_class:
     
     def __init__(self,fiber_list):
+        
+        
         self.fiber_list=fiber_list
         self.number_of_fibers_in_span=len(fiber_list)
         
@@ -1105,11 +1107,14 @@ def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_sig
 
 
 def createOutputDirectory(experimentName):
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
     base_dir=os.getcwd()+'\\'
+
+
     os.chdir(base_dir)
     
 
-    current_dir = "Simulation Results\\most_recent_run\\"
+    current_dir = ""
     current_time = datetime.now()
     
     if experimentName == "most_recent_run":
