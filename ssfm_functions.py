@@ -21,28 +21,81 @@ from datetime import datetime
 
 global pi; pi=np.pi 
 
-#Define frequency range for spectrum based on time basis. 
-def getFreqRangeFromTime(time):
-    return fftshift(fftfreq(len(time), d=time[1]-time[0]))
 
-#Calcualte phase by getting the complex angle of the pulse, unwrapping it and centering on middle entry.
+
+
+
+def getFreqRangeFromTime(time_s):
+    """ 
+    Calculate frequency range for spectrum based on time basis. 
+    
+    When plotting a discretized pulse signal as a function of time,
+    a time range is needed. To plot the spectrum of the pulse, one
+    can compute the FFT and plot it versus the frequency range 
+    calculated by this function
+    
+    Parameters:
+        time_s (nparray): Time range in seconds
+        
+    Returns:
+        nparray: Frequency range in Hz 
+    
+    """
+    
+    return fftshift(fftfreq(len(time_s), d=time_s[1]-time_s[0]))
+
 def getPhase(pulse):
+    """ 
+    Gets the phase of the pulse from its complex angle
+    
+    Calcualte phase by getting the complex angle of the pulse, 
+    unwrapping it and centering on middle entry.
+
+    Parameters:
+        pulse (nparray): Pulse amplitude in time domain
+        
+    Returns:
+        nparray: Phase of pulse at every instance in radians 
+
+    """
+
+    
     phi=np.unwrap(np.angle(pulse)) #Get phase starting from 1st entry
     phi=phi-phi[int(len(phi)/2)]   #Center phase on middle entry
     return phi    
 
-#Calculate local chirp as the (negative) derivative of phase w.r.t. time. 
-def getChirp(time,pulse):
+
+def getChirp(time_s,pulse):
+    """ 
+    Get local chirp at every instance of pulse
+
+    Calculate local chirp as the (negative) time derivative of the local phase
+
+    Parameters:
+        time_s (nparray): Time range in seconds
+        pulse  (nparray): Pulse amplitude in time domain
+        
+    Returns:
+        nparray: Chirp in Hz at every instance 
+
+    """
+    
     phi=getPhase(pulse)
     dphi=np.diff(phi ,prepend = phi[0] - (phi[1]  - phi[0]  ),axis=0) #Change in phase. Prepend to ensure consistent array size 
-    dt  =np.diff(time,prepend = time[0]- (time[1] - time[0] ),axis=0) #Change in time.  Prepend to ensure consistent array size
+    dt  =np.diff(time_s,prepend = time_s[0]- (time_s[1] - time_s[0] ),axis=0) #Change in time.  Prepend to ensure consistent array size
 
     return -1.0/(2*pi)*dphi/dt #Chirp = - 1/(2pi) * d(phi)/dt
     
     
 
-#Class for storing info about the time axis and frequency axis. 
+
+
+
 class timeFreq_class:
+    """
+    Class for storing info about the time axis and frequency axis. 
+    """
+    
     def __init__(self,N,dt):
         self.number_of_points=N
         self.time_step=dt
@@ -80,8 +133,22 @@ class timeFreq_class:
         timeFreq_df.to_csv("timeFreq.csv")  
         
     
-#Loads timeFreq from previous run
+
 def load_timeFreq(path:str): 
+    """ 
+    Loads timeFreq_class for previous run
+
+    Takes a path to a previous run, opens the relevant .csv file and extracts
+    stored info from which the timeFreq class for that run can be restored.
+
+    Parameters:
+        path (str): Path to previous run
+        
+    Returns:
+        timeFreq_class: timeFreq_class used in previous run.
+
+    """
+    
     df = pd.read_csv(path+'\\timeFreq.csv')
     number_of_points = df['number_of_points']
     dt_s = df['dt_s']
@@ -89,61 +156,200 @@ def load_timeFreq(path:str):
     return timeFreq_class(int(number_of_points[0]), dt_s[0])
     
 
+
         
 
-#Function returns pulse power or spectrum PSD
-def getPower(amplitude):
-    return np.abs(amplitude)**2  
+def getPower(amplitude_in_time_or_freq_domain):
+    
+    """ 
+    Computes temporal power or PSD
 
-#Function gets the energy of a pulse pulse or spectrum by integrating the power
-def getEnergy(time_or_frequency,amplitude):
-    return np.trapz(getPower(amplitude),time_or_frequency)
+    For a real electric field,    P = 1/T int_0^T( E_real**2 )dt.
+    For a complex electric field, P = 0.5*|E|**2.
+    Using the complex field makes calculations easier and the factor of
+    0.5 is simply absorbed into the nonlinear parameter, gamma.
+    Same thing works in the frequency domain.
 
-#Gaussian pulse
-def GaussianPulse(time,amplitude,duration,offset,chirp,order,carrier_freq_Hz):
+    Parameters:
+        amplitude_in_time_or_freq_domain (nparray): Temporal or spectral amplitude
+        
+    Returns:
+        nparray: Temporal power or PSD at any instance or frequency 
+
+    """
+    
+    return np.abs(amplitude_in_time_or_freq_domain)**2  
+
+
+
+def getEnergy(time_or_freq,amplitude_in_time_or_freq_domain):
+    """ 
+    Computes energy of signal or spectrum
+
+    Gets the power or PSD of the signal from 
+    getPower(amplitude_in_time_or_freq_domain)
+    and integrates it w.r.t. either time or 
+    frequency to get the energy. 
+
+    Parameters:
+        time_or_freq (nparray): Time range in seconds or freq. range in Hz
+        amplitude_in_time_or_freq_domain (nparray): Temporal or spectral amplitude
+        
+    Returns:
+        float: Energy in J 
+
+    """
+    
+    return np.trapz(getPower(amplitude_in_time_or_freq_domain),time_or_freq)
+
+
+
+
+
+def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order,carrier_freq_Hz):
+    """ 
+    Creates Gaussian pulse
+
+    Generates a Gaussian pulse with the specified properties. 
+
+    Parameters:
+        time_s          (nparray): Time range in seconds
+        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
+        duration_s      (float)  : RMS width of Gaussian, i.e. time at which the amplitude is reduced by a factor exp(-0.5) = 0.6065 
+        time_offset_s   (float)  : Time at which the Gaussian peaks
+        chirp           (float)  : Dimensionless parameter controlling the chirp
+        order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
+        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
+        
+    Returns:
+        nparray: Gaussian pulse in time domain in units of sqrt(W)
+
+    """
+    
+    
     assert 1 <= order, f"Error: Order of gaussian pulse is {order}. Must be >=1"
-    return amplitude*np.exp(- (1+1j*chirp)/2*((time-offset)/(duration))**(2*np.floor(order)))*np.exp(-1j*2*pi*carrier_freq_Hz*time)
+    return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))*np.exp(-1j*2*pi*carrier_freq_Hz*time_s)
 
-#Square pulse approximated with high-order super-Gaussian
-def squarePulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz):
-    return GaussianPulse(time,amplitude,duration,offset,chirp,100,carrier_freq_Hz)
+def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz): 
+    """ 
+    Creates square pulse
+    
+    Generates a square pulse using a high order super-Gaussian pulse. 
+    
+    Parameters:
+        time_s          (nparray): Time range in seconds
+        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
+        duration_s      (float)  : Width of square pulse
+        time_offset_s   (float)  : Central time of square pulse
+        chirp           (float)  : Dimensionless parameter controlling the chirp
+        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
+        
+    Returns:
+        nparray: Square pulse in time domain in units of sqrt(W)
+    
+    """
+    
+    return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,100,carrier_freq_Hz)
 
 
-#Sech pulse
-def sechPulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz):
-    return amplitude/np.cosh((time-offset)/duration)*np.exp(- (1j*chirp)/2*((time-offset)/(duration))**2)*np.exp(-1j*2*pi*carrier_freq_Hz*time)
+def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz):  
+    """ 
+    Creates hyperbolic secant pulse
+    
+    Generates a hyperbolic secant pulse (1/cosh(t)), which is the pulse shape that
+    corresponds to a fundamental soliton; a solution to the NLSE for anormalous dispersion
+    where the pulse remains unchanged as it propagates down the fiber.
+    
+    Parameters:
+        time_s          (nparray): Time range in seconds
+        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
+        duration_s      (float)  : Width of sech pulse, i.e. time at which the amplitude is reduced by a factor sech(1) = 0.64805 
+        time_offset_s   (float)  : Time at which the Gaussian peaks
+        chirp           (float)  : Dimensionless parameter controlling the chirp
+        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
+        
+    Returns:
+        nparray: Sech pulse in time domain in units of sqrt(W)
+    
+    """
+    return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)*np.exp(-1j*2*pi*carrier_freq_Hz*time_s)
 
 
-#Function for adding white noise
-def noise_ASE(time,amplitude):
-    randomAmplitudes=np.random.normal(loc=0.0, scale=amplitude, size=len(time))*(1+0j)
-    randomPhases = np.random.uniform(-pi,pi, len(time))
+def noise_ASE(time_s,noiseAmplitude):
+    """ 
+    Generates white noise in the time domain with the specified amplitude
+    
+    Generates an array of complex numbers with random phase from -pi to pi and 
+    amplitudes distributed normally around 0 and a standard 
+    deviation of noiseAmplitude in units of sqrt(W). 
+    
+    Parameters:
+        time_s           (nparray): Time range in seconds
+        noiseAmplitude   (float)  : StDev of amplitude noise
+        
+    Returns:
+        nparray: Random amplitudes and phases to be added to signal 
+    
+    """
+    randomAmplitudes=np.random.normal(loc=0.0, scale=noiseAmplitude, size=len(time_s))*(1+0j)
+    randomPhases = np.random.uniform(-pi,pi, len(time_s))
     return randomAmplitudes*np.exp(1j*randomPhases)   
 
 
-#Returns a pulse of certain type based on specified parameters. 
-def getPulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
+def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
+    """ 
+    Creates pulse with the specified properties
+
+    Creates a Gaussian, sech or square pulse based on the 'pulseType' parameter.
+    If pulseType == 'custom' it is assumed that the user wants to specify
+    the pulse amplitude 'manually', in which case only noise is returned.
+
+    Parameters:
+        time_s          (nparray): Time range in seconds
+        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
+        duration_s      (float)  : RMS width of Gaussian, i.e. time at which the amplitude is reduced by a factor exp(-0.5) = 0.6065 
+        time_offset_s   (float)  : Time at which the Gaussian peaks
+        chirp           (float)  : Dimensionless parameter controlling the chirp
+        order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
+        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
+        
+    Returns:
+        nparray: Gaussian pulse in time domain in units of sqrt(W)
     
-    noise = noise_ASE(time,noiseAmplitude)
+    """
+    
+    noise = noise_ASE(time_s,noiseAmplitude)
     
     if pulseType.lower()=="gaussian":
-        return GaussianPulse(time,amplitude,duration,offset,chirp,order,carrier_freq_Hz)+noise
+        return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order,carrier_freq_Hz)+noise
     
     if pulseType.lower()=="sech":
-        return sechPulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz)+noise
+        return sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz)+noise
     
     if pulseType.lower()=="square":
-        return squarePulse(time,amplitude,duration,offset,chirp,carrier_freq_Hz)+noise
+        return squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz)+noise
     
     if pulseType.lower()=="custom":
         return noise
 
 
-#Computes FFT of pulse to get its spectrum and verifies that energy is conserved. 
-def getSpectrumFromPulse(time,pulse_amplitude):
-    pulseEnergy=getEnergy(time,pulse_amplitude) #Get pulse energy
-    f=getFreqRangeFromTime(time) 
-    dt=time[1]-time[0]
+def getSpectrumFromPulse(time_s,pulse_amplitude):
+    """ 
+    Converts the amplitude of a signal in the time domain to spectral amplitude in freq. domain
+    
+    Uses the FFT to shift from time to freq. domain and ensures that energy is conserved
+    
+    Parameters:
+        time_s          (nparray): Time range in seconds
+        pulse_amplitude (nparray): Pulse amplitude in sqrt(W)
+        
+    Returns:
+        nparray: spectrum amplitude in sqrt(W)/Hz.  
+    
+    """
+    pulseEnergy=getEnergy(time_s,pulse_amplitude) #Get pulse energy
+    f=getFreqRangeFromTime(time_s) 
+    dt=time_s[1]-time_s[0]
     
     spectrum_amplitude=fftshift(fft(pulse_amplitude))*dt #Take FFT and do shift
     spectrumEnergy=getEnergy(f, spectrum_amplitude) #Get spectrum energy
@@ -153,20 +359,45 @@ def getSpectrumFromPulse(time,pulse_amplitude):
     assert( err<1e-7 ), f'ERROR = {err}: Energy changed when going from Pulse to Spectrum!!!' 
     
     return spectrum_amplitude
+    return spectrum_amplitude
 
 
-
-#Function for getting time base from frequency range
-def getTimeFromFrequency(frequency):  
-    return fftshift(fftfreq(len(frequency), d=frequency[1]-frequency[0]))
-
-
-#Compute iFFT of spectrum to get pulse and verifies that energy is conserved
-def getPulseFromSpectrum(frequency,spectrum_amplitude):
+def getTimeFromFrequency(frequency_Hz):  
+    """ 
+    Calculate time range for pulse based on frequency range. 
     
-    spectrumEnergy=getEnergy(frequency, spectrum_amplitude)
+    Essentially the inverse of the getFreqRangeFromTime function. 
+    If we have a frequency range and take the iFFT of a spectrum amplitude
+    to get the pulse amplitude in the time domain, this function provides the
+    appropriate time range.
     
-    time = getTimeFromFrequency(frequency)
+    Parameters:
+        frequency_Hz (nparray): Freq. range in Hz
+        
+    Returns:
+        nparray: Time range in s
+    
+    """
+    return fftshift(fftfreq(len(frequency_Hz), d=frequency_Hz[1]-frequency_Hz[0]))
+
+
+def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude):
+    """ 
+    Converts the spectral amplitude of a signal in the freq. domain temporal amplitude in time domain
+    
+    Uses the iFFT to shift from freq. to time domain and ensures that energy is conserved
+    
+    Parameters:
+        frequency_Hz          (nparray): Frequency in Hz
+        spectrum_amplitude    (nparray): Spectral amplitude in sqrt(W)/Hz
+        
+    Returns:
+        nparray: Temporal amplitude in sqrt(W). 
+    
+    """    
+    spectrumEnergy=getEnergy(frequency_Hz, spectrum_amplitude)
+    
+    time = getTimeFromFrequency(frequency_Hz)
     dt = time[1]-time[0]
      
     pulse = ifft(ifftshift(spectrum_amplitude))/dt
@@ -177,11 +408,6 @@ def getPulseFromSpectrum(frequency,spectrum_amplitude):
     assert( err<1e-7   ), f'ERROR = {err}: Energy changed when going from Spectrum to Pulse!!!' 
     
     return pulse
-
-#Generates a Gaussian spectrum
-def GaussianSpectrum(frequency,amplitude,bandwidth,carrier_freq_Hz):
-    time = getTimeFromFrequency(frequency)
-    return getSpectrumFromPulse(time, GaussianPulse(time, amplitude, 1/bandwidth, 0,0,1,carrier_freq_Hz))
 
 
 #Class for holding info about individual fibers
@@ -228,9 +454,20 @@ class fiber_span_class:
         fiber_df.to_csv("Fiber_span.csv")
 
 
-#Load fiber span from previous run
 def load_fiber_span(path:str):
+    """ 
+    Loads fiber_span_class for previous run
     
+    Takes a path to a previous run, opens the relevant .csv file and extracts
+    stored info from which the fiber_span_class for that run can be restored.
+    
+    Parameters:
+        path (str): Path to previous run
+        
+    Returns:
+        fiber_span_class: A class containing a list of fibers from a previous run.
+    
+    """    
     df = pd.read_csv(path+'\\Fiber_span.csv')
     Length_m = df['Length_m']
     gamma_per_W_per_m = df['gamma_per_W_per_m']
@@ -240,8 +477,9 @@ def load_fiber_span(path:str):
     
     fiber_list=[]
     
-    for i in range(len(Length_m)):   
-        fiber_list.append( fiber_class(  Length_m[i], gamma_per_W_per_m[i], beta2_s2_per_m[i], alpha_dB_per_m[i] ) )    
+    for i in range(len(Length_m)):
+        current_fiber = fiber_class(  Length_m[i], gamma_per_W_per_m[i], beta2_s2_per_m[i], alpha_dB_per_m[i] )
+        fiber_list.append( current_fiber )    
     
     return fiber_span_class(fiber_list)
 
@@ -332,9 +570,20 @@ class input_signal_class:
             custom_input_df.to_csv("Custom_input_signal.csv")
       
 
-#Load input signal used in previous run        
 def load_InputSignal(path):    
-
+    """ 
+    Loads input_signal_class for previous run
+    
+    Takes a path to a previous run, opens the relevant .csv file and extracts
+    stored info from which the input_signal_class for that run can be restored.
+    
+    Parameters:
+        path (str): Path to previous run
+        
+    Returns:
+        input_signal_class: A class containing the input signal and time base.
+    
+    """    
     #Open dataframe with pulse parameters
     df = pd.read_csv(path+'\\Input_signal.csv')
     
@@ -367,9 +616,28 @@ def load_InputSignal(path):
     return loaded_input_signal  
 
 
-#Decide which approach to use for computing z-steps. 
-def zstep_NL(z,fiber:fiber_class, input_signal:input_signal_class,stepmode,stepSafetyFactor):
+
+def zstep_NL(z_m,fiber:fiber_class, input_signal:input_signal_class,stepmode,stepSafetyFactor):
+    """ 
+    Decide which approach to use for computing variable z-step size
     
+    The magnitude of the z-steps can be chosen in different ways. A cautious
+    approach computes the step based on the peak power divided by the 
+    time resolution. The approx approach uses peak power divided by pulse
+    duration.
+    
+    Parameters:
+        z_m                 (float):              Current z-location in fiber
+        fiber               (fiber_class):        Class containing fiber properties
+        input_signal        (input_signal_class): Class containing signal properties
+        stepmode            (str):                String describing step method
+        stepSafetyFactor    (float):              Scales down calculated step by this factor
+        
+    Returns:
+        float: calculated z-step in m 
+    
+    """
+    #If there is no nonlinearity or no dispersion, complete the whole fiber in 1 step!    
     #TODO: Do we also need to check if alpha = 0?
     if fiber.gamma == 0.0:  
         return fiber.Length
@@ -380,10 +648,10 @@ def zstep_NL(z,fiber:fiber_class, input_signal:input_signal_class,stepmode,stepS
     
     
     if stepmode.lower()=="cautious":
-        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.Pmax*input_signal.duration)**2*np.exp(2*fiber.alpha_Np_per_m*z)/stepSafetyFactor
+        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.Pmax*input_signal.duration)**2*np.exp(2*fiber.alpha_Np_per_m*z_m)/stepSafetyFactor
     
     if stepmode.lower()=="approx":
-        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.Pmax)**2/(input_signal.duration*input_signal.timeFreq.time_step)*np.exp(2*fiber.alpha_Np_per_m*z)/stepSafetyFactor    
+        return np.abs(fiber.beta2)*pi/(fiber.gamma*input_signal.Pmax)**2/(input_signal.duration*input_signal.timeFreq.time_step)*np.exp(2*fiber.alpha_Np_per_m*z_m)/stepSafetyFactor    
 
 
     else:
@@ -391,9 +659,24 @@ def zstep_NL(z,fiber:fiber_class, input_signal:input_signal_class,stepmode,stepS
 
 
 
-#Function computes z-steps if we use a variable method (larger steps when power is low)
 def getVariableZsteps( fiber:fiber_class, input_signal:input_signal_class,stepmode,stepSafetyFactor):    
+    """ 
+    Calculates z-steps and z-locations if a variable step size is desired.
     
+    This function calls zstep_NL multiple times until the end of the array is reached.
+    Then, it returns an array of the z-locations and z-steps.
+    NOTE: The variable z-steps can take a long time to compute and is generally
+    not much more efficient or accurate than simply selecting a fixed stepsize.      
+    
+    Parameters:
+        fiber               (fiber_class):        Class containing fiber properties
+        input_signal        (input_signal_class): Class containing signal properties
+        stepmode            (str):                String describing step method
+        stepSafetyFactor    (float):              Scales down calculated step by this factor
+        
+    Returns:
+        list(nparray,nparray): List contains z_array, which are z-locations inside the fiber and dz_array, which contains step sizes 
+    """    
     z_so_far=0.0
     z_array=np.array([z_so_far])
     dz_array=np.array([])
@@ -416,9 +699,23 @@ def getVariableZsteps( fiber:fiber_class, input_signal:input_signal_class,stepmo
     
     return (z_array, dz_array)
 
-#Compute z-steps taken by the simulation
 def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,fiber_index=""):
+    """ 
+    Decides whether to use fixed or variable step size and returns steps.
     
+    This function either calls getVariableZsteps to get variable z-steps or simply generates
+    fixed z-steps based on the number of steps specified. Also plots and saves charts of 
+    z-locations and z-step sizes for future reference.     
+    
+    Parameters:
+        fiber               (fiber_class):        Class containing fiber properties
+        input_signal        (input_signal_class): Class containing signal properties
+        stepConfig_list     (list):               Contains stepMode, stepApproach and stepSafetyFactor
+        stepSafetyFactor    (float):              Scales down calculated step by this factor
+        
+    Returns:
+        list(nparray,nparray): List contains z_array, which are z-locations inside the fiber and dz_array, which contains step sizes 
+    """    
     current_dir=os.getcwd()+'\\'
     
     newFolderName = "Z-step-graphs\\"
@@ -511,9 +808,23 @@ class ssfm_result_class:
         
         
 
-#Helper function for getting SI prefix (k, M, G, T, etc.) and scaling factor when plotting and reporting results
 def getUnitsFromValue(value):
+    """ 
+    Helper function for getting SI prefix (k, M, G, T, etc.) 
     
+    SSFM simulations can be used for both fibers with lengths on the scale from m to km
+    and for photonic integrated circuits, which may only be a few cm long. Similarly,
+    power, frequencies and times of interrest may have a wide range of scales.
+    This function automatically determines the SI prefix and a scaling factor to be
+    used for plotting. 
+    
+    Parameters:
+        value (float): Value whose order of magnitude is to be determined
+        
+    Returns:
+        scalingFactor (float): If we want to plot a frequency of unknown magnitude, we would do plt.plot(f/scalingFactor) 
+        prefix (str): In the label of the plot, we would write plt.plot(f/scalingFactor,label=f"Freq. [{prefix}Hz]") 
+    """    
     logval=np.log10(value)
     
     scalingFactor = 1.0
@@ -582,9 +893,27 @@ def getUnitsFromValue(value):
 
     
 
-#Print and plot different characteristic lengths (L_eff, L_D, L_NL etc.)
 def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zinfo,fiber_index,destination=None):    
+    """ 
+    Computes, prints and plots characteristic distances (L_eff, L_D, L_NL)
     
+    When solving the NLSE, different effects such as attenuation, dispersion,
+    SPM, soliton oscillations etc. take place on different length scales.
+    This function computes these length scales, prints them and plots a 
+    comparison, which is saved for reference.Note that the plot adaptively
+    detects if beta2 is positive or negative. 
+    
+    Parameters:
+        fiber (fiber_class): Class containing info about the current fiber
+        input_signal (input_signal_class): Class containing info about input signal
+        zinfo (list(nparray,nparray)  ): Contains the z_array and dz_array
+        fiber_index (int): Index of fiber in the span
+        destination (std) (optional): If None, print to console. Otherwise, print to file and make plot
+        
+    Returns:
+         
+    
+    """    
     scalingfactor, prefix= getUnitsFromValue(fiber.Length)
     length_list=np.array([])
     #Ensure that we don't measure distances in Mm or Gm
@@ -614,9 +943,6 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
         length_list=np.append(length_list,L_eff)
         
     if destination != None:
-        
-        
-        
         ax.barh("Fiber Length", fiber.Length/scalingfactor, color ='C0')
         
         if fiber.alpha_Np_per_m>0:
@@ -722,9 +1048,23 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
 
    
 
-#Print results to file and to console
 def describe_run( current_time, current_fiber:fiber_class,  current_input_signal:input_signal_class,current_stepConfig, zinfo,fiber_index=""  ,destination = None):
-  
+    """ 
+    Prints info about fiber, characteristic lengths and stepMode
+    
+    Calls the self-describe function of fiber, the describe_sim_parameters function and prints stepMode info to specified destination 
+    
+    Parameters:
+        current_time           (datetime): Current date and time at which run was initiated
+        current_fiber          (fiber_class): Info about current fiber 
+        current_input_signal   (input_signal_class): Info about input signal
+        current_stepConfig     (list): Parameters for choosing step size
+        zinfo                  (list(nparray, nparray)): z_array and dz_array
+        fiber_index=""         (str) (optional): String of integer indexing fiber in fiber span 
+        destination = None     (class '_io.TextIOWrapper') (optional): If None, print to console. Else, print to specified file
+        
+    Returns:
+    """  
     print("Info about fiber",file = destination )
     current_fiber.describe_fiber(destination = destination)
     print(' ', file = destination)
@@ -738,9 +1078,23 @@ def describe_run( current_time, current_fiber:fiber_class,  current_input_signal
     print(' ', file = destination)
 
 
-#Describe the input of the SSFM    
 def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_signal_class,stepConfig, zinfo,fiber_index=""):
+    """ 
+    Prints info about fiber, characteristic lengths and stepMode
     
+    Calls the self-describe function of fiber, the describe_sim_parameters function and prints stepMode info to console and file
+    
+    Parameters:
+        current_time            (datetime): Current date and time at which run was initiated
+        fiber                   (fiber_class): Info about current fiber 
+        input_signal            (input_signal_class): Info about input signal
+        stepConfig              (list): Parameters for choosing step size
+        zinfo                   (list(nparray, nparray)): z_array and dz_array
+        fiber_index=""          (str) (optional): String of integer indexing fiber in fiber span 
+        
+    Returns:
+        
+    """  
     with open(f"input_config_description_{fiber_index}.txt","w") as output_file:
             #Print info to terminal
 
@@ -776,9 +1130,19 @@ def createOutputDirectory(experimentName):
 
 
 
-#Save step config in folder
 def saveStepConfig(stepConfig):
-
+    """ 
+    Saves stepConfig to .csv file
+    
+    Uses pandas to save stepConfig to .csv file so it can be loaded later
+    
+    Parameters:
+        stepConfig (list): Contains stepmode ('fixed'' or 'variable'), stepNumber or stepApproach ('cautious' or 'adaptive') and stepSafetyFactor (float)
+        
+    Returns:
+         
+    
+    """
     #Initialize dataframe
     stepConfig_df = pd.DataFrame(columns=['stepmode',
                                       'stepNumber_or_stepApproach',
@@ -791,9 +1155,20 @@ def saveStepConfig(stepConfig):
     #Export dataframe to .csv file
     stepConfig_df.to_csv("stepConfig.csv")        
 
-#Load step config from previous run
+
 def load_StepConfig(path):
+    """ 
+    Loads stepConfig from previous run
     
+    Loads stepConfig from previous run when path to run folder is specified. 
+    
+    Parameters:
+        path (str): Path to folder
+        
+    Returns:
+        list: Contains stepMode ('fixed'' or 'variable'), stepNumber or stepApproach ('cautious' or 'adaptive') and stepSafetyFactor (float)
+    
+    """    
     df = pd.read_csv(path+'\\stepConfig.csv')
     
     stepmode = df['stepmode'][0]
@@ -803,9 +1178,22 @@ def load_StepConfig(path):
     return (stepmode,stepNumber_or_stepApproach,SafetyFactor)
     
     
-#Load all relevant info about previous run.
 def load_previous_run(basePath):
+    """ 
+    Loads all relevant info about previous run
     
+    When path to previous run folder is specified, open .csv files describing fiber, signal and stepconfig.
+    Use the stored values to reconstruct the parameters for the run.
+    
+    Parameters:
+        basePath (str): Path to run folder
+        
+    Returns:
+        fiber_span (fiber_span_class): Info about fiber span consisting of 1 or more fibers
+        input_signal (input_signal_class): Info about input signal
+        stepConfig (list):  Info about step configuration
+    
+    """    
     print(f"Loading run in {basePath}")
     
     fiber_span      = load_fiber_span(basePath+'\\input_info\\')
@@ -817,8 +1205,26 @@ def load_previous_run(basePath):
     return fiber_span, input_signal, stepConfig
 
 
-#Run SSFM
 def SSFM(fiber_span:fiber_span_class,input_signal:input_signal_class,stepConfig=("fixed","cautious",10.0),experimentName ="most_recent_run"):
+    """ 
+    Runs the Split-Step Fourier method and calculates field throughout fiber
+    
+    Runs the SSFM to solve the NLSE with the specified parameters. Goes through the following steps:
+        1) Create folder for saving input config and results
+        2) Loops over fibers in fiber_span. Gets zsteps for each and runs the SSFM
+        3) Stores results of each fiber in a separate ssfm_result_class and uses pulse at the end as input to next one
+        4) Returns list of ssfm_result_class objects
+    
+    Parameters:
+        fiber_span (fiber_span_class): Class holding fibers through which the signal is propagated
+        input_signal (input_signal_class): Class holding info about initial input signal
+        stepConfig=("fixed","cautious",10.0) (optional): Parameters for determining step size. 
+        experimentName ="most_recent_run" (optional): Name of folder for present simulation.
+        
+    Returns:
+        list: List of ssfm_result_class corresponding to each fiber segment.  
+    
+    """
     print("########### Initializing SSFM!!! ###########")
     
     #Create output directory, switch to it and return appropriate paths and current time
@@ -925,11 +1331,19 @@ def SSFM(fiber_span:fiber_span_class,input_signal:input_signal_class,stepConfig=
     return ssfm_result_list
 
 
-
-
-#Function for optionally saving plots
 def saveplot(basename):
-
+    """ 
+    Helper function for adding file type suffix to name of plot
+    
+    Helper function for adding file type suffix to name of plot
+    
+    Parameters:
+        basename (str): Name to which a file extension is to be appended if not already present. 
+        
+    Returns:
+        
+    
+    """
     
     if basename.lower().endswith(('.pdf','.png','.jpg')) == False:
         basename+='.png'
@@ -937,9 +1351,29 @@ def saveplot(basename):
     plt.savefig(basename, bbox_inches='tight', pad_inches=0)
 
 
-#If SSFM run involves multiple concatenated fibers, this function stitches the z-steps together into one array
 def unpackZvals(ssfm_result_list):
+    """ 
+    Unpacks z_values of individual fibers in ssfm_result_list into single array
     
+    For a span of 5 fibers with 100 steps each, this function concatenates the
+    arrays like this:
+        
+        Merge A[0:98] with (B[0:98] + A[end])      to create z_temp
+        Merge z_temp with  (C[0:98] + z_temp[end]) to create z_temp
+        Merge z_temp with  (D[0:98] + z_temp[end]) to create z_temp
+        Merge z_temp with  (E[0:99] + z_temp[end]) to create z_temp
+        
+    Note that the final entry in the first 4 arrays are discarded as they are
+    identical to the first element in the next one.
+    
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        
+    Returns:
+        nparray: z_values for each fiber concatenated together.  
+    
+    """    
     if len(ssfm_result_list)==1:
         return ssfm_result_list[0].zinfo[0]
     
@@ -962,9 +1396,32 @@ def unpackZvals(ssfm_result_list):
         
     return zvals
 
-#If SSFM run involves multiple concatenated fibers, this function stitches the matrices together into one array
 def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
+    """ 
+    Unpacks pulseMatrix or spectrumMatrix for individual fibers in ssfm_result_list into single array
     
+    For a span of 5 fibers with 100 steps each, this function concatenates the
+    arrays like this:
+        
+        Merge A[0:98,:] with B[0:98,:]  to create mat_temp
+        Merge mat_temp with  C[0:98,:]  to create mat_temp
+        Merge mat_temp with  D[0:98,:]  to create mat_temp
+        Merge mat_temp with  E[0:99,:]  to create mat_temp
+        
+    Note that the final entry in the first 4 arrays are discarded as they are
+    identical to the first element in the next one.
+    
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        zvals (nparray) : Array of unpacked z_values from unpackZvals. Needed for pre-allocating returned matrix
+        timeFreq (timeFreq_class): timeFreq for simulation. Needed for pre-allocation
+        pulse_or_spectrum (str) : Indicates if we want to unpack pulseMatrix or spectrumMatrix
+        
+    Returns:
+        nparray: Array of size (n_z_steps,n_time_steps) describing pulse amplitude or spectrum for whole fiber span.
+    
+    """  
     number_of_fibers = len(ssfm_result_list)
     
     
@@ -1000,23 +1457,30 @@ def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
             
         starting_row +=len(ssfm_result.zinfo[0])-1
     
-
-    assert 1==2
     
     return matrix        
 
           
 def plotFirstAndLastPulse(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
+    """ 
+    Plots input pulse and output pulse of simulation
     
+    Line plot of input pulse and output pulse of SSFM run centered in the middle of the time array and with nrange points on either side
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        **kwargs: If firstandlastpulsescale=='log' is contained in keyword args, set y-scale to log
+        
+    Returns:
+    """    
 
     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq
     
     Nmin = int(timeFreq.number_of_points/2-nrange)
-    Nmax = int(timeFreq.number_of_points/2+nrange)
-    
-    Tmin = timeFreq.t[Nmin]
-    Tmax = timeFreq.t[Nmax]    
+    Nmax = int(timeFreq.number_of_points/2+nrange)     
      
     zvals = unpackZvals(ssfm_result_list)
 
@@ -1050,6 +1514,19 @@ def plotFirstAndLastPulse(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
 
 
 def plotPulseMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
+    """ 
+    Plots amplitude calculated by SSFM as colour surface
+    
+    2D colour plot of signal amplitude in time domain throughout entire fiber span
+    normalized to the highest peak power throughout. 
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        
+    Returns:
+    """   
     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq
     
@@ -1083,7 +1560,20 @@ def plotPulseMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
     os.chdir(ssfm_result_list[0].dirs[0])
 
 def plotPulseMatrix3D(ssfm_result_list, nrange:int, dB_cutoff):
-   
+    """ 
+    Plots amplitude calculated by SSFM as 3D colour surface
+    
+    3D colour plot of signal amplitude in time domain throughout entire fiber span
+    normalized to the highest peak power throughout. 
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        
+    Returns:
+    """   
+    
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     
     Nmin = int(timeFreq.number_of_points/2-nrange)
@@ -1119,7 +1609,20 @@ def plotPulseMatrix3D(ssfm_result_list, nrange:int, dB_cutoff):
 
 
 def plotPulseChirp2D(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
+    """ 
+    Plots local chirp throughout entire fiber span.
     
+    2D colour plot of local chirp throughout entire fiber span with red indicating
+    lower frequencies and blue indicating higher ones. 
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        **kwargs : If chirpPlotRange=(fmin,fmax) is contained in **kwargs, use these values to set color scale. 
+        
+    Returns:
+    """     
     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     
@@ -1166,8 +1669,22 @@ def plotPulseChirp2D(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
 def plotEverythingAboutPulses(ssfm_result_list, 
                               nrange:int, 
                               dB_cutoff, **kwargs):
-  
+    """ 
+    Generates all plots of pulse amplitudes throughout fiber span
     
+    Calls plotFirstAndLastPulse, plotPulseMatrix2D, plotPulseMatrix3D and plotPulseChirp2D
+    sequentially and saves the plots in the appropriate directory
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        **kwargs (optional):     
+    
+    Returns:
+
+    
+    """  
     print('  ')
     plotFirstAndLastPulse(ssfm_result_list, nrange, dB_cutoff,**kwargs)
     plotPulseMatrix2D(ssfm_result_list,nrange,dB_cutoff)
@@ -1181,7 +1698,19 @@ def plotEverythingAboutPulses(ssfm_result_list,
 
 
 def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
-
+    """ 
+    Plots input spectrum and output spectrum of simulation
+    
+    Line plot of input spectrum and output spectrum of SSFM run centered in 
+    the middle of the time array and with nrange points on either side
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        
+    Returns:
+    """    
     timeFreq = ssfm_result_list[0].input_signal.timeFreq
     
     Nmin = int(timeFreq.number_of_points/2-nrange)
@@ -1218,8 +1747,21 @@ def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
     plt.show()
     os.chdir(ssfm_result_list[0].dirs[0])
 
+
 def plotSpectrumMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
+    """ 
+    Plots spectrum calculated by SSFM as colour surface
     
+    2D colour plot of spectrum in freq domain throughout entire fiber span
+    normalized to the highest peak power throughout. 
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        
+    Returns:
+    """     
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
     matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"spectrum")
@@ -1247,7 +1789,19 @@ def plotSpectrumMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
     os.chdir(ssfm_result_list[0].dirs[0])
 
 def plotSpectrumMatrix3D(ssfm_result_list, nrange:int, dB_cutoff):
+    """ 
+    Plots spectrum calculated by SSFM as 3D colour surface
     
+    3D colour plot of signal spectrum in freq domain throughout entire fiber span
+    normalized to the highest peak power throughout. 
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+        
+    Returns:
+    """    
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
     matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"spectrum")
@@ -1282,7 +1836,21 @@ def plotSpectrumMatrix3D(ssfm_result_list, nrange:int, dB_cutoff):
 def plotEverythingAboutSpectra(ssfm_result_list,
                                nrange:int, 
                                dB_cutoff):
-  
+    """ 
+    Generates all plots of pulse amplitudes throughout fiber span
+    
+    Calls plotFirstAndLastSpectrum, plotSpectrumMatrix2D and plotSpectrumMatrix3D
+    sequentially and saves the plots in the appropriate directory
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
+    
+    Returns:
+
+    
+    """   
 
     print('  ')  
     plotFirstAndLastSpectrum(ssfm_result_list, nrange, dB_cutoff)
@@ -1300,9 +1868,20 @@ from matplotlib.legend import LineCollection
 from matplotlib.colors import LinearSegmentedColormap
 
 def makeChirpGif(ssfm_result_list,nrange:int,framerate=30):
+    """ 
+    Animates pulse evolution and shows local chirp 
     
+    Animates pulse power evolution and shows local chirp by changing line color.
+    Saves result as .gif file.
+    Note: Producing the animation can take a several minutes on a regular 
+    PC, so please be patient.
     
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange (int): Determines how many points on either side of the center we wish to plot  
+        framerate=30 (int) (optional): Framerate of .gif animation. May want to reduce this number for simulations with few steps.     
     
+    """      
     print("Making .gif anination of pulse evolution. This may take a while, so please be patient.")
     
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -1389,27 +1968,76 @@ def makeChirpGif(ssfm_result_list,nrange:int,framerate=30):
     os.chdir(ssfm_result_list[0].dirs[0])
 
 
-#Calculate central time or frequency of pulse or spectrum
 def getAverageTimeOrFreq(time_or_freq,pulse_or_spectrum):
+    """ 
+    Computes central time (or frequency) of pulse (spectrum) 
     
+    Computes central time (or frequency) of pulse (spectrum) by calculating
+    the 'expectation value'. 
+    
+    Parameters:
+        time_or_freq (nparray): Time range in seconds or freq. range in Hz
+        pulse_or_spectrum (nparray): Temporal or spectral amplitude
+        
+    Returns:
+        float: average time or frequency 
+    
+    """    
     E=getEnergy(time_or_freq,pulse_or_spectrum)    
     meanValue = np.trapz( time_or_freq*getPower(pulse_or_spectrum),time_or_freq )/E   
     return meanValue
     
-#Calculate variance of pulse or spectrum
 def getVarianceTimeOrFreq(time_or_freq,pulse_or_spectrum):
+    """ 
+    Computes variance of pulse or spectrum 
+    
+    Computes variance of pulse in time domain or freq domain via
+    <x**2>-<x>**2
+    
+    Parameters:
+        time_or_freq (nparray): Time range in seconds or freq. range in Hz
+        pulse_or_spectrum (nparray): Temporal or spectral amplitude
+        
+    Returns:
+        float: variance in time or frequency domains 
+    
+    """ 
     E=getEnergy(time_or_freq,pulse_or_spectrum)
     variance = np.trapz( time_or_freq**2*getPower(pulse_or_spectrum),time_or_freq )/E  - (getAverageTimeOrFreq(time_or_freq,pulse_or_spectrum))**2
     return variance   
     
-#Calculate standard deviation of pulse or spectrum (pulse duration or spectral width)
 def getStDevTimeOrFreq(time_or_freq,pulse_or_spectrum):
+    """ 
+    Computes standard deviation of pulse or spectrum 
+    
+    Computes std of pulse in time domain or freq domain via
+    sqrt(<x**2>-<x>**2)
+    
+    Parameters:
+        time_or_freq (nparray): Time range in seconds or freq. range in Hz
+        pulse_or_spectrum (nparray): Temporal or spectral amplitude
+        
+    Returns:
+        float: Stdev in time or frequency domains 
+    
+    """ 
     return np.sqrt(getVarianceTimeOrFreq(time_or_freq,pulse_or_spectrum))
 
 
-#Plot how central time, duration, central freq. and spectral width change with z. 
 def plotAverageAndStdTimeAndFreq(ssfm_result_list):
+    """ 
+    Plots how spectral and temporal width of signal change with distance
     
+    Uses getAverageTimeOrFreq and getStDevTimeOrFreq to create dual-axis 
+    line plot of temporal and spectral center and widths throughout fiber span.
+    Saves plot in appropriate folder.
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        
+    Returns:
+    
+    """    
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
     zvals = unpackZvals(ssfm_result_list)
     
@@ -1465,14 +2093,29 @@ def plotAverageAndStdTimeAndFreq(ssfm_result_list):
     os.chdir(ssfm_result_list[0].dirs[0])
     
 
-#Call all the plotting functions in one go
 def plotEverythingAboutResult(ssfm_result_list, 
                               nrange_pulse, 
                               dB_cutoff_pulse, 
                               nrange_spectrum, 
                               dB_cutoff_spectrum, 
                               **kwargs):
+    """ 
+    Generates all plots of pulse amplitudes, spectra etc. throughout fiber span
     
+    Calls   plotAverageAndStdTimeAndFreq, plotEverythingAboutPulses and 
+    plotEverythingAboutSpectra sequentially, saving plots in the appropriate directory
+    
+    Parameters:
+        ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
+        nrange_pulse (int): For pulse plots, determines how many points on either side of the center we wish to plot  
+        dB_cutoff_pulse   : For pulse plots, lowest y-value in plot is this many dB smaller than the peak power
+        nrange_spectrum (int): For spectrum plots, determines how many points on either side of the center we wish to plot  
+        dB_cutoff_spectrum   : For spectrum plots, lowest y-value in plot is this many dB smaller than the peak power
+        **kwargs (optional):     
+    
+    Returns:
+
+    """  
     plotAverageAndStdTimeAndFreq(ssfm_result_list)
     
     plotEverythingAboutPulses(ssfm_result_list, 
@@ -1482,6 +2125,8 @@ def plotEverythingAboutResult(ssfm_result_list,
     plotEverythingAboutSpectra(ssfm_result_list,
                                    nrange_spectrum, 
                                    dB_cutoff_spectrum)
+
+
 
 if __name__ == "__main__":
     
@@ -1530,7 +2175,7 @@ if __name__ == "__main__":
 
     
     testSafetyFactor = 10
-    testStepConfig=("fixed",2**5,testSafetyFactor)
+    testStepConfig=("fixed",2**8,testSafetyFactor)
 
 
 
