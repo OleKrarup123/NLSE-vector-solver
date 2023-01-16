@@ -86,17 +86,35 @@ def getChirp(time_s,pulse):
 
     return -1.0/(2*pi)*dphi/dt #Chirp = - 1/(2pi) * d(phi)/dt
     
-    
-
-
 
 
 class timeFreq_class:
     """
     Class for storing info about the time axis and frequency axis. 
+    
+    Attributes:
+        number_of_points (int): Number of time points
+        time_step (float): Duration of each time step
+        t (nparray): Array containing all the time points
+        tmin (float): First entry in time array
+        tmax (float): Last entry in time array
+        
+        f (nparray): Frequency range corresponding to t when FFT is taken
+        fmin (float): Lowest (most negative) frequency component
+        fmax (float): Highest (most positive) frequency component
+        freq_step (float): Frequency resolution
     """
     
-    def __init__(self,N,dt):
+    def __init__(self,N,dt):        
+        """
+        Constructor for the timeFreq_class
+        
+        Parameters:
+            self
+            N (int): Number of time points
+            dt (float): Duration of each time step
+        """
+        
         self.number_of_points=N
         self.time_step=dt
         t=np.linspace(0,N*dt,N)
@@ -112,6 +130,14 @@ class timeFreq_class:
         self.describe_config()
         
     def describe_config(self,destination = None):
+        """
+        Prints a description of the time and frequency info to destination
+        
+        Parameters:
+            self
+            destination (class '_io.TextIOWrapper') (optional): File to which destination should be printed. If None, print to console
+        """
+        
         print(" ### timeFreq Configuration Parameters ###" , file = destination)
         print(f"  Number of points \t\t= {self.number_of_points}", file = destination)
         print(f"  Start time, tmin \t\t= {self.tmin*1e12:.3f}ps", file = destination)
@@ -125,6 +151,13 @@ class timeFreq_class:
         
 
     def saveTimeFreq(self):
+        """
+        Saves info needed to construct this timeFreq_class instance to .csv 
+        file so they can be loaded later using the load_timeFreq function.
+        
+        Parameters:
+            self
+        """
         timeFreq_df = pd.DataFrame(columns=['number_of_points', 'dt_s',])
 
         timeFreq_df.loc[  len(timeFreq_df.index) ] = [self.number_of_points,
@@ -412,38 +445,84 @@ def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude):
 
 #Class for holding info about individual fibers
 class fiber_class:
+    """
+    Class for storing info about a single fiber. 
+    
+    Attributes:
+        Length (float): Length of fiber in [m]
+        gamma (float): Nonlinearity parameter in [1/W/m]
+        beta2 (float): 2nd order dispersion parameter in [s^2/m]
+        alpha_dB_per_m (float): Attenuation coeff in [dB/m]
+        alpha_Np_per_m (float): Attenuation coeff in [Np/m]
+        total_loss_dB (float):  Length*alpha_dB_per_m
+    """
+    
     def __init__(self,L,gamma,beta2,alpha_dB_per_m):
-      self.Length=L
-      self.gamma=gamma
-      self.beta2=beta2
-      self.alpha_dB_per_m=alpha_dB_per_m
-      self.alpha_Np_per_m = self.alpha_dB_per_m*np.log(10)/10.0 #Loss coeff is usually specified in dB/km, but Nepers/km is more useful for calculations
-      self.total_loss =  alpha_dB_per_m*self.Length
-      #TODO: Make alpha frequency dependent.  
-      self.describe_fiber()
+        """
+        Constructor for the fiber_class
+        
+        Parameters:
+            self
+            L (float): Length of fiber in [m]
+            gamma (float): Nonlinearity parameter in [1/W/m]
+            beta2 (float): 2nd order dispersion parameter in [s^2/m]
+            alpha_dB_per_m (float): Attenuation coeff in [dB/m]
+        """
+        self.Length=L
+        self.gamma=gamma
+        self.beta2=beta2
+        self.alpha_dB_per_m=alpha_dB_per_m
+        self.alpha_Np_per_m = self.alpha_dB_per_m*np.log(10)/10.0 #Loss coeff is usually specified in dB/km, but Nepers/km is more useful for calculations
+        self.total_loss_dB =  alpha_dB_per_m*self.Length
+        #TODO: Make alpha frequency dependent.  
+        self.describe_fiber()
       
     def describe_fiber(self,destination = None):
+        """
+        Prints a description of the fiber to destination
+        
+        Parameters:
+            self
+            destination (class '_io.TextIOWrapper') (optional): File to which destination should be printed. If None, print to console
+        """
         print(' ### Characteristic parameters of fiber: ###', file = destination)
         print(f'Fiber Length [km] \t= {self.Length/1e3} ', file = destination)
         print(f'Fiber gamma [1/W/m] \t= {self.gamma} ', file = destination)
         print(f'Fiber beta2 [s^2/m] \t= {self.beta2} ', file = destination)
         print(f'Fiber alpha_dB_per_m \t= {self.alpha_dB_per_m} ', file = destination)
         print(f'Fiber alpha_Np_per_m \t= {self.alpha_Np_per_m} ', file = destination)
-        print(f'Fiber total loss [dB] \t= {self.total_loss} ', file = destination)
+        print(f'Fiber total loss [dB] \t= {self.total_loss_dB} ', file = destination)
         print(' ', file = destination)
 
 
 #Class for holding info about span of concatenated fibers. 
 class fiber_span_class:
+    """
+    Class for storing info about multiple concatenated fibers. 
     
+    Attributes:
+        fiber_list (list): List of fiber_class objects
+        number_of_fibers_in_span (int): Number of fibers concatenated together
+    """
     def __init__(self,fiber_list):
+        """
+        Constructor for the fiber_span_class
         
+        Parameters:
+            self
+            fiber_list (list): List of fiber_class objects
+        """
         
         self.fiber_list=fiber_list
         self.number_of_fibers_in_span=len(fiber_list)
         
     def saveFiberSpan(self):
+        """
+        Saves info about each fiber in span to .csv file so they can be loaded later by the load_fiber_span function 
         
+        Parameters:
+            self
+        """
         fiber_df = pd.DataFrame(columns=['Length_m', 
                                          'gamma_per_W_per_m',
                                          'beta2_s2_per_m',
@@ -488,8 +567,41 @@ def load_fiber_span(path:str):
 
 #Class for holding input signal sent into fiber. 
 class input_signal_class:
+    """
+    Class for storing info about signal launched into a fiber span. 
+    
+    Attributes:
+        Amax (float): Peak amplitude of signal in [sqrt(W)]
+        Pmax (float): Peak power of signal in [W]
+        duration (float): Temporal duration of signal [s]
+        offset (float): Delay of signal relative to t=0 in [s]
+        chirp (float): Chirping factor of sigal 
+        carrier_freq_Hz (float):  Frequency of signal relative to central frequency [Hz]
+        pulseType (str): Selects pulse type from a set of pre-defined ones. Select "custom" to define the signal manually
+        order (int): For n==1 a and pulseType = "Gaussian" a regular Gaussian pulse is returned. For n>=1 return a super-Gaussian  
+        noiseAmplitude (float): Amplitude of added white noise in units of [sqrt(W)]. 
+        
+        timeFreq (timeFreq_class): Contains info about discretized time and freq axes
+        
+        amplitude (nparray): Numpy array containing the signal amplitude over time in [sqrt(W)]
+        spectrum (nparray): Numpy array containing spectral amplitude obtained from FFT of self.amplitude in [sqrt(W)/Hz]
+    """
+    
     def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
-
+        """
+        Constructor for input_signal_class
+        
+        Parameters:
+            timeFreq (timeFreq_class): Contains info about discretized time and freq axes
+            peak_amplitude (float): Peak amplitude of signal in [sqrt(W)]
+            duration (float): Temporal duration of signal [s]
+            offset (float): Delay of signal relative to t=0 in [s]
+            chirp (float): Chirping factor of sigal 
+            carrier_freq_Hz (float):  Frequency of signal relative to central frequency [Hz]
+            pulseType (str): Selects pulse type from a set of pre-defined ones. Select "custom" to define the signal manually
+            order (int): For n==1 a and pulseType = "Gaussian" a regular Gaussian pulse is returned. For n>=1 return a super-Gaussian  
+            noiseAmplitude (float): Amplitude of added white noise in units of [sqrt(W)]. 
+        """
 
         self.Amax = peak_amplitude
         self.Pmax= self.Amax**2
@@ -502,9 +614,7 @@ class input_signal_class:
         self.noiseAmplitude=noiseAmplitude        
 
         self.timeFreq=timeFreq
-        self.number_of_points=timeFreq.number_of_points
-        self.dt=timeFreq.time_step
-        
+  
         
         self.amplitude = getPulse(self.timeFreq.t,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude)
         
@@ -519,6 +629,13 @@ class input_signal_class:
         self.describe_input_signal()
         
     def describe_input_signal(self,destination = None):
+        """
+        Prints a description of the input signal to destination
+        
+        Parameters:
+            self
+            destination (class '_io.TextIOWrapper') (optional): File to which destination should be printed. If None, print to console
+        """
         print(" ### Input Signal Parameters ###" , file = destination)
         print(f"  Pmax \t\t\t\t= {self.Pmax:.3f} W", file = destination)
         print(f"  Duration \t\t\t= {self.duration*1e12:.3f} ps", file = destination)
@@ -532,7 +649,13 @@ class input_signal_class:
         print( "   ", file = destination)
 
     def saveInputSignal(self):
- 
+        """
+        Saves info needed to construct this input_signal_class instance to .csv 
+        file so they can be loaded later using the load_InputSignal function.
+        
+        Parameters:
+            self
+        """
         #Initialize dataframe
         signal_df = pd.DataFrame(columns=['Amax_sqrt(W)',
                                           'Pmax_W',
@@ -793,8 +916,33 @@ def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,
         
 #Class for holding result of SSFM simulation
 class ssfm_result_class:
-    def __init__(self, input_signal:input_signal_class, fiber:fiber_class,stepConfig,zinfo,experimentName,directories):
+    """
+    Class for storing info about results computed by SSFM. 
+    
+    Attributes:
+        input_signal ( input_signal_class ): Signal launched into fiber
+        fiber ( fiber_class ): Fiber signal was sent through
+        stepConfig ( list ): Parameters for choosing step size
+        zinfo ( list ): z-locations and z-steps throughout the fiber
+        experimentName ( str ): Name of experiment
+        dirs ( tuple ): Contains directory where current script is located and the directory where output is to be saved
         
+        pulseMatrix ( nparray ): Amplitude of pulse at every z-location in fiber
+        spectrumMatrix ( nparray ): Spectrum of pulse at every z-location in fiber       
+    """
+    def __init__(self, input_signal:input_signal_class, fiber:fiber_class,stepConfig,zinfo,experimentName,directories):
+
+        """
+        Constructor for ssfm_result_class. 
+        
+       Parameters:
+            input_signal ( input_signal_class ): Signal launched into fiber
+            fiber ( fiber_class ): Fiber signal was sent through
+            stepConfig ( list ): Parameters for choosing step size
+            zinfo ( list ): z-locations and z-steps throughout the fiber
+            experimentName ( str ): Name of experiment
+            directories ( tuple ): Contains directory where current script is located and the directory where output is to be saved 
+        """ 
         self.input_signal = input_signal
         self.fiber = fiber
         self.stepConfig = stepConfig
@@ -1697,9 +1845,6 @@ def plotEverythingAboutPulses(ssfm_result_list,
     plotPulseMatrix3D(ssfm_result_list,nrange,dB_cutoff)
     print('  ')
 
-    
-    
-        
 
 
 def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
@@ -2173,7 +2318,7 @@ if __name__ == "__main__":
     fiber_test          = fiber_class(1000, 8e-3,   -30e3*1e-300,    0  )
     
     
-    fiber_list = [fiber_test ]
+    fiber_list = [fiber_test ,fiber_disp_positive,fiber_test]
     fiber_span = fiber_span_class(fiber_list)
     
     
