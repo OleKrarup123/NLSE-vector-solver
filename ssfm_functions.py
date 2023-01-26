@@ -1862,13 +1862,18 @@ def plotPulseChirp2D(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
     for i in range(len(zvals)):
         Cmatrix[i,:]=getChirp(t/1e12,matrix[i,Nmin:Nmax])/1e9
 
-
+    
+    chirpplotrange_set_flag = False
     for kw, value in kwargs.items():
         if kw.lower()=='chirpplotrange' and type(value)==tuple:
             Cmatrix[Cmatrix<value[0]]=value[0]
             Cmatrix[Cmatrix>value[1]]=value[1]
+            chirpplotrange_set_flag = True
 
-
+    if chirpplotrange_set_flag == False:
+        Cmatrix[Cmatrix<-50]=-50 #Default fmin = -50GHz
+        Cmatrix[Cmatrix> 50]=50  #Default fmax = -50GHz
+        
     surf=ax.contourf(T, Z, Cmatrix,levels=40,cmap='RdBu')
     
     ax.set_xlabel('Time [ps]')
@@ -2345,6 +2350,63 @@ def plotEverythingAboutResult(ssfm_result_list,
                                    dB_cutoff_spectrum)
 
 
+from scipy import signal
+
+def waveletTransform(timeFreq:timeFreq_class,
+                     pulse, 
+                     nrange_pulse,
+                     nrange_spectrum,
+                     dB_cutoff ):
+    
+    Nmin_pulse = np.max([int(timeFreq.number_of_points/2-nrange_pulse),0])
+    Nmax_pulse = np.min([int(timeFreq.number_of_points/2+nrange_pulse),timeFreq.number_of_points-1])    
+    
+    Tmin = timeFreq.t[Nmin_pulse]
+    Tmax = timeFreq.t[Nmax_pulse]
+    
+    Nmin_spec = np.max([int(timeFreq.number_of_points/2-nrange_spectrum),0])
+    Nmax_spec = np.min([int(timeFreq.number_of_points/2+nrange_spectrum),timeFreq.number_of_points-1])    
+    
+    
+    Fmin = timeFreq.f[Nmin_spec]
+    Fmax = timeFreq.f[Nmax_spec]
+    
+    t = timeFreq.t[Nmin_pulse:Nmax_pulse]
+    f = np.arange(1,1e6,1000) 
+    # TODO: f should be "duration of wavelet" not its frequency!!!
+    
+
+    
+    
+    cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], signal.ricker, f,dtype=complex)
+    
+    cwtmatr_yflip = np.flipud(cwtmatr)
+    
+    
+    Z= np.abs(cwtmatr_yflip)**2
+    plt.imshow(Z, 
+               extent=[Tmin*1e12, Tmax*1e12, np.min(f)/1e6, np.max(f)/1e6], 
+               cmap='jet', 
+               aspect='auto',
+               vmax=np.max(Z), 
+               vmin=0)
+    
+    
+    Z = np.abs(cwtmatr)**2
+    fig, ax = plt.subplots(dpi=200)
+    ax.set_title('Wavelet transform of final pulse')
+    T, F = np.meshgrid(t, f)
+    
+    surf=ax.contourf(T/1e-12,F/1e6, Z,levels=40)
+    ax.set_xlabel('Time. [ps]')
+    ax.set_ylabel('Frequency [GHz]')
+    cbar=fig.colorbar(surf, ax=ax) 
+    saveplot('wavelet_final') 
+    plt.show()
+    
+    
+    
+    
 
 
 def wavelengthToFreq(wavelength_m):
@@ -2416,8 +2478,8 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     
     
-    N  = 2**16 #Number of points
-    dt = 10e-15 #Time resolution [s] 
+    N  = 2**15 #Number of points
+    dt = 0.1e-12 #Time resolution [s] 
     
     centerWavelength=1550e-9
     centerFreq_test=wavelengthToFreq(centerWavelength)
@@ -2426,7 +2488,7 @@ if __name__ == "__main__":
     timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
     testAmplitude = np.sqrt(1)                    #Amplitude in units of sqrt(W)
-    testDuration  =1e-11   #Pulse 1/e^2 duration [s]
+    testDuration  =2**7*dt   #Pulse 1/e^2 duration [s]
     testOffset    = 0                       #Time offset
     testChirp = 0
     testPulseType='gaussian' 
@@ -2446,7 +2508,7 @@ if __name__ == "__main__":
     #testInputSignal.amplitude = np.cos(2*pi*5e9*testInputSignal.timeFreq.t)*testInputSignal.amplitude
     #testInputSignal.spectrum  = getSpectrumFromPulse(testInputSignal.timeFreq.t, testInputSignal.amplitude) 
       
-    beta_list = [300e3*1e-30] #Dispersion in units of s^(entry+2)/m    
+    beta_list = [100e3*1e-30] #Dispersion in units of s^(entry+2)/m    
     #beta_list = [0,0,1e-12*1e-24*1e-11] 
     
     #  Initialize fibers
@@ -2461,7 +2523,7 @@ if __name__ == "__main__":
 
     
     testSafetyFactor = 10
-    testStepConfig=("fixed",2**11,testSafetyFactor)
+    testStepConfig=("fixed",2**8,testSafetyFactor)
 
 
 
@@ -2473,7 +2535,7 @@ if __name__ == "__main__":
     
     
     #Plot pulses
-    nrange_test_pulse=9600
+    nrange_test_pulse=1000
     cutoff_test_pulse=-60
 
     #Plot pulses
@@ -2489,6 +2551,10 @@ if __name__ == "__main__":
     
     #makeChirpGif(ssfm_result_list,nrange_test_pulse,chirpRange=[-20,20],framerate=30)
     
-    
+    waveletTransform(ssfm_result_list[0].input_signal.timeFreq,
+                     ssfm_result_list[0].pulseMatrix[-1,:], 
+                     nrange_test_pulse,
+                     nrange_test_spectrum,
+                     cutoff_test_pulse )
     
     
