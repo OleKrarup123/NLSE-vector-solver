@@ -247,7 +247,7 @@ def getEnergy(time_or_freq,amplitude_in_time_or_freq_domain):
 
 
 
-def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order,carrier_freq_Hz):
+def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order):
     """ 
     Creates Gaussian pulse
 
@@ -260,7 +260,6 @@ def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order,carr
         time_offset_s   (float)  : Time at which the Gaussian peaks
         chirp           (float)  : Dimensionless parameter controlling the chirp
         order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
-        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
         
     Returns:
         nparray: Gaussian pulse in time domain in units of sqrt(W)
@@ -269,9 +268,9 @@ def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order,carr
     
     
     assert 1 <= order, f"Error: Order of gaussian pulse is {order}. Must be >=1"
-    return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))*np.exp(-1j*2*pi*carrier_freq_Hz*time_s)
+    return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))
 
-def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz): 
+def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp): 
     """ 
     Creates square pulse
     
@@ -283,17 +282,16 @@ def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq
         duration_s      (float)  : Width of square pulse
         time_offset_s   (float)  : Central time of square pulse
         chirp           (float)  : Dimensionless parameter controlling the chirp
-        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
         
     Returns:
         nparray: Square pulse in time domain in units of sqrt(W)
     
     """
     
-    return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,100,carrier_freq_Hz)
+    return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,100)
 
 
-def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz):  
+def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp):  
     """ 
     Creates hyperbolic secant pulse
     
@@ -307,13 +305,12 @@ def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_H
         duration_s      (float)  : Width of sech pulse, i.e. time at which the amplitude is reduced by a factor sech(1) = 0.64805 
         time_offset_s   (float)  : Time at which the Gaussian peaks
         chirp           (float)  : Dimensionless parameter controlling the chirp
-        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
         
     Returns:
         nparray: Sech pulse in time domain in units of sqrt(W)
     
     """
-    return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)*np.exp(-1j*2*pi*carrier_freq_Hz*time_s)
+    return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)
 
 
 def noise_ASE(time_s,noiseAmplitude):
@@ -337,7 +334,7 @@ def noise_ASE(time_s,noiseAmplitude):
     return randomAmplitudes*np.exp(1j*randomPhases)   
 
 
-def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
+def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,pulseType,order,noiseAmplitude):
     """ 
     Creates pulse with the specified properties
 
@@ -352,7 +349,6 @@ def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz
         time_offset_s   (float)  : Time at which the Gaussian peaks
         chirp           (float)  : Dimensionless parameter controlling the chirp
         order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
-        carrier_freq_Hz (float)  : Shifts central frequency of pulse.
         
     Returns:
         nparray: Gaussian pulse in time domain in units of sqrt(W)
@@ -362,13 +358,13 @@ def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz
     noise = noise_ASE(time_s,noiseAmplitude)
     
     if pulseType.lower()=="gaussian":
-        return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order,carrier_freq_Hz)+noise
+        return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order)+noise
     
     if pulseType.lower()=="sech":
-        return sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz)+noise
+        return sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp)+noise
     
     if pulseType.lower()=="square":
-        return squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,carrier_freq_Hz)+noise
+        return squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp)+noise
     
     if pulseType.lower()=="custom":
         return noise
@@ -435,7 +431,7 @@ def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude):
     Returns:
         nparray: Temporal amplitude in sqrt(W). 
     
-    """    
+    """   
     spectrumEnergy=getEnergy(frequency_Hz, spectrum_amplitude)
     
     time = getTimeFromFrequency(frequency_Hz)
@@ -624,7 +620,6 @@ class input_signal_class:
         duration (float): Temporal duration of signal [s]
         offset (float): Delay of signal relative to t=0 in [s]
         chirp (float): Chirping factor of sigal 
-        carrier_freq_Hz (float):  Frequency of signal relative to central frequency [Hz]
         pulseType (str): Selects pulse type from a set of pre-defined ones. Select "custom" to define the signal manually
         order (int): For n==1 a and pulseType = "Gaussian" a regular Gaussian pulse is returned. For n>=1 return a super-Gaussian  
         noiseAmplitude (float): Amplitude of added white noise in units of [sqrt(W)]. 
@@ -635,7 +630,7 @@ class input_signal_class:
         spectrum (nparray): Numpy array containing spectral amplitude obtained from FFT of self.amplitude in [sqrt(W)/Hz]
     """
     
-    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude):
+    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,offset,chirp,pulseType,order,noiseAmplitude):
         """
         Constructor for input_signal_class
         
@@ -645,7 +640,6 @@ class input_signal_class:
             duration (float): Temporal duration of signal [s]
             offset (float): Delay of signal relative to t=0 in [s]
             chirp (float): Chirping factor of sigal 
-            carrier_freq_Hz (float):  Frequency of signal relative to central frequency [Hz]
             pulseType (str): Selects pulse type from a set of pre-defined ones. Select "custom" to define the signal manually
             order (int): For n==1 a and pulseType = "Gaussian" a regular Gaussian pulse is returned. For n>=1 return a super-Gaussian  
             noiseAmplitude (float): Amplitude of added white noise in units of [sqrt(W)]. 
@@ -656,7 +650,6 @@ class input_signal_class:
         self.duration=duration
         self.offset=offset
         self.chirp=chirp
-        self.carrier_freq_Hz=carrier_freq_Hz
         self.pulseType=pulseType
         self.order=order
         self.noiseAmplitude=noiseAmplitude        
@@ -664,7 +657,7 @@ class input_signal_class:
         self.timeFreq=timeFreq
   
         
-        self.amplitude = getPulse(self.timeFreq.t,peak_amplitude,duration,offset,chirp,carrier_freq_Hz,pulseType,order,noiseAmplitude)
+        self.amplitude = getPulse(self.timeFreq.t,peak_amplitude,duration,offset,chirp,pulseType,order,noiseAmplitude)
         
 
         if getEnergy(self.timeFreq.t, self.amplitude) == 0.0:
@@ -689,7 +682,6 @@ class input_signal_class:
         print(f"  Duration \t\t\t= {self.duration*1e12:.3f} ps", file = destination)
         print(f"  Offset \t\t\t= {self.offset*1e12:.3f} ps", file = destination)
         print(f"  Chirp \t\t\t= {self.chirp:.3f}", file = destination)
-        print(f"  Carrier_freq \t\t\t= {self.carrier_freq_Hz/1e12} THz", file = destination)
         print(f"  pulseType \t\t\t= {self.pulseType}", file = destination)
         print(f"  order \t\t\t= {self.order}", file = destination)
         print(f"  noiseAmplitude \t\t= {self.noiseAmplitude:.3f} sqrt(W)", file = destination)
@@ -710,7 +702,6 @@ class input_signal_class:
                                           'duration_s',
                                           'offset_s',
                                           'chirp',
-                                          'carrier_freq_Hz',
                                           'pulseType',
                                           'order',
                                           'noiseAmplitude_sqrt(W)'])
@@ -723,7 +714,6 @@ class input_signal_class:
                                                   self.duration,
                                                   self.offset,
                                                   self.chirp,
-                                                  self.carrier_freq_Hz,
                                                   self.pulseType,
                                                   self.order,
                                                   self.noiseAmplitude]
@@ -764,7 +754,6 @@ def load_InputSignal(path):
     duration_s              = df['duration_s'][0]
     offset_s                = df['offset_s'][0]
     chirp                   = df['chirp'][0]
-    carrier_freq_Hz         = df['carrier_freq_Hz'][0]
     pulseType               = df['pulseType'][0]
     order                   = int(df['order'][0])
     noiseAmplitude_sqrt_W   = df['noiseAmplitude_sqrt(W)'][0]
@@ -773,7 +762,7 @@ def load_InputSignal(path):
     timeFreq = load_timeFreq( path )
     
     #Initialize class for loaded signal
-    loaded_input_signal = input_signal_class(timeFreq,Amax_sqrt_W,duration_s,offset_s,chirp,carrier_freq_Hz,pulseType,order, noiseAmplitude_sqrt_W)
+    loaded_input_signal = input_signal_class(timeFreq,Amax_sqrt_W,duration_s,offset_s,chirp,pulseType,order, noiseAmplitude_sqrt_W)
     
     #If signal type is "custom", load the raw amplitude values
     if pulseType == "custom":
@@ -1518,6 +1507,8 @@ def SSFM(fiber_span:fiber_span_class,
         spectrum = np.copy(input_signal.spectrum )
         
         print(f"Running SSFM with nsteps = {len(zinfo[1])}")
+        N_steps = len(zinfo[1])
+        updates = 0
         for z_step_index, dz in enumerate(zinfo[1]):   
             pulse*=np.exp(nonlinearity*getPower(pulse)*dz) #Apply nonlinearity
             
@@ -1531,8 +1522,13 @@ def SSFM(fiber_span:fiber_span_class,
             ssfm_result.pulseMatrix[z_step_index+1,:]=pulse
             ssfm_result.spectrumMatrix[z_step_index+1,:]=spectrum
             
-            if showProgressFlag == True:
-                print(f"SSFM progress through fiber number {fiber_index+1} = {z_step_index/len(zinfo[1])*100:.2f}%")
+
+
+            finished = 100*(z_step_index/N_steps)
+            if divmod(finished, 10)[0] > updates and showProgressFlag == True:
+                updates += 1
+                print(f"SSFM progress through fiber number {fiber_index+1} = {np.floor(finished):.2f}%")
+            
             
         #Append list of output results
         
@@ -1928,7 +1924,7 @@ def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
     Returns:
     """    
     timeFreq = ssfm_result_list[0].input_signal.timeFreq
-    
+    center_freq_Hz = timeFreq.centerFrequency
     Nmin = np.max([int(timeFreq.number_of_points/2-nrange),0])
     Nmax = np.min([int(timeFreq.number_of_points/2+nrange),timeFreq.number_of_points-1])   
     
@@ -1946,7 +1942,7 @@ def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
     Pmax_final = np.max(P_final)
     Pmax=np.max([Pmax_initial,Pmax_final]) 
 
-    f=timeFreq .f[Nmin:Nmax]/1e12
+    f=(timeFreq .f[Nmin:Nmax]+center_freq_Hz)/1e12
     
     scalingFactor,prefix=getUnitsFromValue(np.max(zvals))
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -1984,12 +1980,14 @@ def plotSpectrumMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
     
     Nmin = np.max([int(timeFreq.number_of_points/2-nrange),0])
     Nmax = np.min([int(timeFreq.number_of_points/2+nrange),timeFreq.number_of_points-1])   
-    
+    center_freq_Hz = timeFreq.centerFrequency
+
+
     #Plot pulse evolution throughout fiber in normalized log scale
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(dpi=200)
     ax.set_title('Spectrum Evolution (dB scale)')
-    f = timeFreq.f[Nmin:Nmax]/1e12 
+    f = (timeFreq.f[Nmin:Nmax]+center_freq_Hz)/1e12 
     z = zvals
     F, Z = np.meshgrid(f, z)
     Pf=getPower(matrix[:,Nmin:Nmax]  )/np.max(getPower(matrix[:,Nmin:Nmax]))
@@ -2024,13 +2022,15 @@ def plotSpectrumMatrix3D(ssfm_result_list, nrange:int, dB_cutoff):
     
     Nmin = np.max([int(timeFreq.number_of_points/2-nrange),0])
     Nmax = np.min([int(timeFreq.number_of_points/2+nrange),timeFreq.number_of_points-1])     
-    
+    center_freq_Hz = timeFreq.centerFrequency
+
+
     #Plot pulse evolution in 3D
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(1,1, figsize=(10,7),subplot_kw={"projection": "3d"})
     plt.title("Spectrum Evolution (dB scale)")
       
-    f = timeFreq.f[Nmin:Nmax]/1e9 
+    f = (timeFreq.f[Nmin:Nmax]+center_freq_Hz)/1e12 
     z = zvals
     F_surf, Z_surf = np.meshgrid(f, z)
     P_surf=getPower(matrix[:,Nmin:Nmax]  )/np.max(getPower(matrix[:,Nmin:Nmax]))
@@ -2256,6 +2256,7 @@ def plotAverageAndStdTimeAndFreq(ssfm_result_list):
     
     """    
     timeFreq = ssfm_result_list[0].input_signal.timeFreq   
+    center_freq_Hz = timeFreq.centerFrequency
     zvals = unpackZvals(ssfm_result_list)
     
     pulseMatrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"pulse")
@@ -2293,17 +2294,17 @@ def plotAverageAndStdTimeAndFreq(ssfm_result_list):
     plt.title("Evolution of temporal/spectral widths and centers")
     ax.plot(zvals/scalingFactor_Z,meanTimeArray/scalingFactor_pulse, 'C0-',label = "Pulse Center")
     ax.plot(zvals/scalingFactor_Z,stdTimeArray/scalingFactor_pulse, 'C0--',label =  "Pulse Width")
-    ax.set_ylabel(f'Time [{prefix_pulse}s]')
     ax.set_xlabel(f'Distance [{prefix_Z}m]')
+    ax.set_ylabel(f'Time [{prefix_pulse}s]',color = 'C0')
     ax.tick_params(axis='y',labelcolor='C0')
     
     ax2=ax.twinx()
-    ax2.plot(zvals/scalingFactor_Z,meanFreqArray/scalingFactor_spectrum,'C1-', label= "Spectrum Center")
+    ax2.plot(zvals/scalingFactor_Z,meanFreqArray/scalingFactor_spectrum,'C1-', label= f"Spectrum Center rel. to $f_c$={center_freq_Hz/1e12:.5}THz ")
     ax2.plot(zvals/scalingFactor_Z,stdFreqArray/scalingFactor_spectrum,'C1--',  label= "Spectrum Width")
     
-    ax2.set_ylabel(f'Freq. [{prefix_spectrum}Hz]')
+    ax2.set_ylabel(f'Freq. [{prefix_spectrum}Hz]',color = 'C1')
     ax2.tick_params(axis='y',labelcolor='C1')
-    fig.legend(bbox_to_anchor=(1.35,0.8))
+    fig.legend(bbox_to_anchor=(1.55,0.8))
     
     saveplot('Width_evo') 
     plt.show()
@@ -2347,15 +2348,63 @@ def plotEverythingAboutResult(ssfm_result_list,
 
 
 def wavelengthToFreq(wavelength_m):
+    """ 
+    Converts wavelength in m to frequency in Hz
+    
+    Converts wavelength in m to frequency in Hz using f=c/lambda
+    
+    Parameters:
+        wavelength_m (float): Wavelength in m
+        
+    Returns:
+        float: Frequency in Hz 
+    """     
     return c/wavelength_m
 
 def freqToWavelength(freq_Hz):
+    """ 
+    Converts frequency in Hz to wavelength in m
+    
+    Converts frequency in Hz to wavelength in m using lambda=c/f
+    
+    Parameters:
+        freq_Hz (float): Frequency in Hz
+        
+    Returns:
+        float: Wavelength in m
+    """  
     return c/freq_Hz
 
 def wavelengthBWtoFreqBW(wavelength_m,wavelengthBW_m):
+    """ 
+    Converts bandwidth in m to bandwidth in Hz
+    
+    A signal centered at lambda_0 with bandwidth specified in terms of wavelength
+    will have a frequency bandwidth of c*lambda_BW/lambda**2
+    
+    Parameters:
+        wavelength_m   (float): Wavelength in m
+        wavelengthBW_m (float): Wavelength bandwidth in m
+        
+    Returns:
+        float: Frequency bandwidth in Hz
+    """  
     return c*wavelengthBW_m/wavelength_m**2
 
 def freqBWtoWavelengthBW(freq_Hz,freqBW_Hz):
+    """ 
+    Converts bandwidth in Hz to bandwidth in m
+    
+    A signal centered at f_0 with bandwidth specified in terms of frequency
+    will have a wavelength bandwidth of c*freq_BW/freq**2
+    
+    Parameters:
+        freq_Hz   (float): Frequency in Hz
+        freqBW_Hz (float): Frequency bandwidth in Hz
+        
+    Returns:
+        float: Wavelength bandwidth in m
+    """  
     return c*freqBW_Hz/freq_Hz**2
 
 
@@ -2371,16 +2420,15 @@ if __name__ == "__main__":
     dt = 10e-15 #Time resolution [s] 
     
     centerWavelength=1550e-9
-    centerFreq=wavelengthToFreq(centerWavelength)
+    centerFreq_test=wavelengthToFreq(centerWavelength)
     
     
-    timeFreq_test=timeFreq_class(N,dt,centerFreq)
+    timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
     testAmplitude = np.sqrt(1)                    #Amplitude in units of sqrt(W)
     testDuration  =1e-11   #Pulse 1/e^2 duration [s]
     testOffset    = 0                       #Time offset
     testChirp = 0
-    testCarrierFreq=0
     testPulseType='gaussian' 
     testOrder = 1
     testNoiseAmplitude = 0
@@ -2391,7 +2439,6 @@ if __name__ == "__main__":
                                           testDuration,
                                           testOffset,
                                           testChirp,
-                                          testCarrierFreq,
                                           testPulseType,
                                           testOrder,
                                           testNoiseAmplitude)
@@ -2419,9 +2466,9 @@ if __name__ == "__main__":
 
 
 
-    expName="SecondOrderDispersion"
+    #expName="SecondOrderDispersion"
     #Run SSFM
-    ssfm_result_list = SSFM(fiber_span,testInputSignal,stepConfig=testStepConfig,experimentName=expName,showProgressFlag=True)
+    ssfm_result_list = SSFM(fiber_span,testInputSignal,stepConfig=testStepConfig,showProgressFlag=True)
     
     
     
