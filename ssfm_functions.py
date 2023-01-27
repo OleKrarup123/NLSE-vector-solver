@@ -1136,7 +1136,7 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
             ax.barh("Effective Length", L_eff/scalingfactor, color ='C1')
 
 
-    Length_disp_array = np.ones_like(fiber.beta_list)*1e100    
+    Length_disp_array = np.ones_like(fiber.beta_list)*1.0e100    
 
     for i, beta_n in enumerate(fiber.beta_list):    
 
@@ -1153,12 +1153,13 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
         
         else:
             Length_disp=1e100
-            
+        
+        Length_disp_array[i] = Length_disp 
         
     
     if fiber.gamma !=0.0:
         Length_NL = 1/fiber.gamma/input_signal.Pmax   
-        N_soliton=np.sqrt(Length_disp/Length_NL)
+        N_soliton=np.sqrt(Length_disp_array[0]/Length_NL)
     else:
         Length_NL=1e100
         N_soliton=np.NaN
@@ -1208,7 +1209,7 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
         if N_ratio<=1:
             Length_wave_break = 1e100
         else:
-            Length_wave_break = Length_disp/np.sqrt(N_soliton**2/Nmin_OWB**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
+            Length_wave_break = Length_disp_array[0]/np.sqrt(N_ratio**2-1)  #Characteristic length for Optical Wave breaking with Gaussian pulse
         length_list=np.append(length_list,Length_wave_break)
         print(' ', file = destination)
         print(f'   sign(beta2) \t\t\t\t= {np.sign(fiber.beta_list[0])}, so Optical Wave Breaking may occur ', file = destination)
@@ -2352,6 +2353,8 @@ def plotEverythingAboutResult(ssfm_result_list,
 
 
 
+
+
 from scipy import signal
 
 def waveletTest(M,s):
@@ -2386,15 +2389,22 @@ def waveletTransform(timeFreq:timeFreq_class,
     #f = np.arange(1,1e6,1000) 
     # TODO: f should be "duration of wavelet" not its frequency!!!
     #wavelet_durations = np.linspace(0.01e-9,0.1e-9,1000)
-    wavelet_durations = np.linspace(0.01e-9,0.1e-9,1000)
+    wavelet_durations = np.linspace(0.01e-9,1e-9,1000)
     
-    wavelet_durations/= wavelet_durations[1]-wavelet_durations[0]
+    dt_wavelet = wavelet_durations[1]-wavelet_durations[0]
     
     
-    cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], waveletTest, wavelet_durations,dtype=complex)
+    cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], signal.morlet2, wavelet_durations/dt_wavelet,dtype=complex)
     
     plt.figure()
-    plt.plot(t,np.abs(pulse[Nmin_pulse:Nmax_pulse]))
+    plt.plot(t,np.real(pulse[Nmin_pulse:Nmax_pulse]))
+    plt.plot(t,np.imag(pulse[Nmin_pulse:Nmax_pulse]))
+    plt.show()
+    
+        
+    plt.figure()
+    plt.plot(t,getChirp(t, pulse[Nmin_pulse:Nmax_pulse])/1e9)
+    plt.ylabel('Chirp [GHz]')
     plt.show()
     
     
@@ -2402,7 +2412,7 @@ def waveletTransform(timeFreq:timeFreq_class,
     
     
       
-    Z = np.abs(cwtmatr_yflip)**2
+    Z = np.abs(cwtmatr)**2
     Z /= np.max(Z)
     
     Z[Z<10**(dB_cutoff/10)] = 10**(dB_cutoff/10)
@@ -2410,11 +2420,11 @@ def waveletTransform(timeFreq:timeFreq_class,
 
     fig, ax = plt.subplots(dpi=200)
     ax.set_title('Wavelet transform of final pulse')
-    T, D = np.meshgrid(t, wavelet_durations)
+    T, F = np.meshgrid(t, 1/wavelet_durations)
     
-    surf=ax.contourf(T/1e-12,D/1e-9, Z,levels=40)
+    surf=ax.contourf(T/1e-12,F/1e9, Z,levels=40)
     ax.set_xlabel('Time. [ps]')
-    ax.set_ylabel('Wavelet durations [ns]')
+    ax.set_ylabel('Freq. [GHz]')
     cbar=fig.colorbar(surf, ax=ax) 
     saveplot('wavelet_final') 
     plt.show()
@@ -2493,8 +2503,8 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     
     
-    N  = 2**15 #Number of points
-    dt = 0.1e-12 #Time resolution [s] 
+    N  = 2**16 #Number of points
+    dt = 100e-15 #Time resolution [s] 
     
     centerWavelength=1550e-9
     centerFreq_test=wavelengthToFreq(centerWavelength)
@@ -2503,7 +2513,7 @@ if __name__ == "__main__":
     timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
     testAmplitude = np.sqrt(1)                    #Amplitude in units of sqrt(W)
-    testDuration  =2**7*dt   #Pulse 1/e^2 duration [s]
+    testDuration  =2**8*dt   #Pulse 1/e^2 duration [s]
     testOffset    = 0                       #Time offset
     testChirp = 0
     testPulseType='gaussian' 
@@ -2527,7 +2537,7 @@ if __name__ == "__main__":
     #beta_list = [0,0,1e-12*1e-24*1e-11] 
     
     #  Initialize fibers
-    fiber_test = fiber_class(1000, 1e-100,   beta_list,    0  )
+    fiber_test = fiber_class(3e3, 1e-3,   beta_list,    0  )
    
     
     
@@ -2538,7 +2548,7 @@ if __name__ == "__main__":
 
     
     testSafetyFactor = 10
-    testStepConfig=("fixed",2**8,testSafetyFactor)
+    testStepConfig=("fixed",2**9,testSafetyFactor)
 
 
 
@@ -2567,9 +2577,9 @@ if __name__ == "__main__":
     #makeChirpGif(ssfm_result_list,nrange_test_pulse,chirpRange=[-20,20],framerate=30)
     
     waveletTransform(ssfm_result_list[0].input_signal.timeFreq,
-                     ssfm_result_list[0].pulseMatrix[-1,:], 
-                     nrange_test_pulse,
-                     nrange_test_spectrum,
-                     cutoff_test_pulse )
+                      ssfm_result_list[0].pulseMatrix[-1,:], 
+                      nrange_test_pulse,
+                      nrange_test_spectrum,
+                      cutoff_test_pulse )
     
     
