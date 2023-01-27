@@ -2350,7 +2350,18 @@ def plotEverythingAboutResult(ssfm_result_list,
                                    dB_cutoff_spectrum)
 
 
+
+
 from scipy import signal
+
+def waveletTest(M,s):
+    
+    w=1
+    x = np.arange(0, M) - (M - 1.0) / 2
+    x = x / s
+    wavelet = np.exp(1j * w * x) * np.exp(-0.5 * x**2) * np.pi**(-0.25)
+    output = np.sqrt(1/s) * wavelet
+    return output  
 
 def waveletTransform(timeFreq:timeFreq_class,
                      pulse, 
@@ -2372,34 +2383,38 @@ def waveletTransform(timeFreq:timeFreq_class,
     Fmax = timeFreq.f[Nmax_spec]
     
     t = timeFreq.t[Nmin_pulse:Nmax_pulse]
-    f = np.arange(1,1e6,1000) 
+    #f = np.arange(1,1e6,1000) 
     # TODO: f should be "duration of wavelet" not its frequency!!!
+    #wavelet_durations = np.linspace(0.01e-9,0.1e-9,1000)
+    wavelet_durations = np.linspace(0.01e-9,0.1e-9,1000)
     
-
+    wavelet_durations/= wavelet_durations[1]-wavelet_durations[0]
     
     
-    cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], signal.ricker, f,dtype=complex)
+    cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], waveletTest, wavelet_durations,dtype=complex)
+    
+    plt.figure()
+    plt.plot(t,np.abs(pulse[Nmin_pulse:Nmax_pulse]))
+    plt.show()
+    
     
     cwtmatr_yflip = np.flipud(cwtmatr)
     
     
-    Z= np.abs(cwtmatr_yflip)**2
-    plt.imshow(Z, 
-               extent=[Tmin*1e12, Tmax*1e12, np.min(f)/1e6, np.max(f)/1e6], 
-               cmap='jet', 
-               aspect='auto',
-               vmax=np.max(Z), 
-               vmin=0)
+      
+    Z = np.abs(cwtmatr_yflip)**2
+    Z /= np.max(Z)
     
+    Z[Z<10**(dB_cutoff/10)] = 10**(dB_cutoff/10)
     
-    Z = np.abs(cwtmatr)**2
+
     fig, ax = plt.subplots(dpi=200)
     ax.set_title('Wavelet transform of final pulse')
-    T, F = np.meshgrid(t, f)
+    T, D = np.meshgrid(t, wavelet_durations)
     
-    surf=ax.contourf(T/1e-12,F/1e6, Z,levels=40)
+    surf=ax.contourf(T/1e-12,D/1e-9, Z,levels=40)
     ax.set_xlabel('Time. [ps]')
-    ax.set_ylabel('Frequency [GHz]')
+    ax.set_ylabel('Wavelet durations [ns]')
     cbar=fig.colorbar(surf, ax=ax) 
     saveplot('wavelet_final') 
     plt.show()
@@ -2471,7 +2486,7 @@ def freqBWtoWavelengthBW(freq_Hz,freqBW_Hz):
 
 
 
-    
+  
 
 if __name__ == "__main__":
     
