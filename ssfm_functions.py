@@ -25,8 +25,6 @@ from datetime import datetime
 
 
 
-
-
 def getFreqRangeFromTime(time_s):
     """ 
     Calculate frequency range for spectrum based on time basis. 
@@ -1341,7 +1339,7 @@ def describe_run( current_time, current_fiber:fiber_class,  current_input_signal
 
 
 
-def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_signal_class,fiber_index=""):
+def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_signal_class,fiber_index):
     """ 
     Prints info about fiber, characteristic lengths and stepMode
     
@@ -1351,7 +1349,7 @@ def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_sig
         current_time            (datetime): Current date and time at which run was initiated
         fiber                   (fiber_class): Info about current fiber 
         input_signal            (input_signal_class): Info about input signal
-        fiber_index=""          (str) (optional): String of integer indexing fiber in fiber span 
+        fiber_index             (str) : Integer indexing fiber in fiber span 
         
     Returns:
         
@@ -1359,10 +1357,10 @@ def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_sig
     with open(f"input_config_description_{fiber_index}.txt","w") as output_file:
             #Print info to terminal
 
-            describe_run( current_time, fiber,  input_signal,fiber_index=fiber_index)
+            describe_run( current_time, fiber,  input_signal,fiber_index=str(fiber_index))
             
             #Print info to file
-            describe_run( current_time, fiber,  input_signal, fiber_index=fiber_index  ,destination = output_file)    
+            describe_run( current_time, fiber,  input_signal, fiber_index=str(fiber_index)  ,destination = output_file)    
 
 
 def createOutputDirectory(experimentName):
@@ -1540,8 +1538,6 @@ def SSFM(fiber_span:fiber_span_class,
     #Save input signal parameters
     input_signal.saveInputSignal()
     
-    #saveStepConfig(stepConfig)
-    
     
     
     #Return to main output directory
@@ -1558,11 +1554,7 @@ def SSFM(fiber_span:fiber_span_class,
     
         print(f"Propagating through fiber number {fiber_index+1} out of {fiber_span.number_of_fibers_in_span}")
  
-        
-        #Get z-steps and z-locations throughout fiber and save plots of these values to new folder
-        #zinfo = getZsteps(fiber,current_input_signal,stepConfig,fiber_index=str(fiber_index))
-        
-
+    
         
         #Initialize arrays to store pulse and spectrum throughout fiber
         ssfm_result = ssfm_result_class(current_input_signal,fiber,experimentName,dirs)
@@ -1574,16 +1566,10 @@ def SSFM(fiber_span:fiber_span_class,
         os.chdir(newFolderPath)
 
         #Print simulation info to both terminal and .txt file in output folder
-        describeInputConfig(current_time, fiber,  current_input_signal,fiber_index=str(fiber_index))
+        describeInputConfig(current_time, fiber,  current_input_signal,fiber_index)
         
         #Return to main output directory
         os.chdir(current_dir)
-        
-
-        
-    
-        
-        
         
         #Pre-calculate dispersion term
         dispterm=np.zeros_like(input_signal.timeFreq.f)*1.0
@@ -1596,37 +1582,45 @@ def SSFM(fiber_span:fiber_span_class,
         disp_and_loss_half_step = disp_and_loss**0.5
         #Precalculate constants for nonlinearity
         
+        #Use simply NL model by default if Raman is ignored
         NL_function = NL_simple
-        
         if fiber.ramanModel != "None":
             NL_function = NL_full
         
         
         
         #Initialize arrays to store temporal profile and spectrum while calculating SSFM
-        
-        spectrum = np.copy(input_signal.spectrum )*disp_and_loss_half_step
+        spectrum = getSpectrumFromPulse(current_input_signal.timeFreq.t, current_input_signal.amplitude)*disp_and_loss_half_step
+
+        #spectrum = np.copy(current_input_signal.spectrum )*disp_and_loss_half_step
         pulse    = getPulseFromSpectrum(input_signal.timeFreq.f, spectrum)
         
-    
-
-        print(f"Running SSFM with nsteps = {fiber.numberOfSteps}")
+        #
+        #Apply half dispersion step
+        #Start loop
+        #   Apply full NL step
+        #   Apply full Disp step
+        #End loop
+        #Apply half dispersion step
+        
+        
+        print(f"Running SSFM with {fiber.numberOfSteps} steps")
         updates = 0
         for z_step_index in range(fiber.numberOfSteps):   
-            pulse*=NL_function(fiber,input_signal.timeFreq,pulse,fiber.dz) #Apply nonlinearity
             
-            spectrum = getSpectrumFromPulse(t, pulse)*(disp_and_loss) #Go to spectral domain and apply disp and loss
+            #Apply nonlinearity
+            pulse*=NL_function(fiber,input_signal.timeFreq,pulse,fiber.dz) 
+            
+            #Go to spectral domain and apply disp and loss
+            spectrum = getSpectrumFromPulse(t, pulse)*(disp_and_loss) 
             
             
-            pulse=getPulseFromSpectrum(f, spectrum) #Return to time domain 
-            
-            
-            #Store results and repeat
+            #Apply half dispersion step to spectrum and store results 
             ssfm_result.spectrumMatrix[z_step_index+1,:]=spectrum*disp_and_loss_half_step
             ssfm_result.pulseMatrix[z_step_index+1,:]=getPulseFromSpectrum(f, ssfm_result.spectrumMatrix[z_step_index+1,:])
             
-            
-
+            #Return to time domain 
+            pulse=getPulseFromSpectrum(f, spectrum) 
 
             finished = 100*(z_step_index/fiber.numberOfSteps)
             if divmod(finished, 10)[0] > updates and showProgressFlag == True:
@@ -1638,17 +1632,17 @@ def SSFM(fiber_span:fiber_span_class,
         
         ssfm_result_list.append(ssfm_result)
         
-        #Take pulse at output of this fiber and feed it into the next one
-        current_input_signal.amplitude =np.copy(ssfm_result.pulseMatrix[z_step_index+1,:])
-        current_input_signal.Pmax = np.max(getPower(current_input_signal.amplitude))
+        #Take signal at output of this fiber and feed it into the next one
+        current_input_signal.amplitude = np.copy(ssfm_result.pulseMatrix[z_step_index+1,:])
+        current_input_signal.spectrum  = np.copy(ssfm_result.spectrumMatrix[z_step_index+1,:])
         
 
     print("Finished running SSFM!!!")
     
     #Exit current output directory and return to base directory.
     os.chdir(base_dir)
-        
-        
+
+             
     return ssfm_result_list
 
 
@@ -1695,11 +1689,12 @@ def unpackZvals(ssfm_result_list):
         nparray: z_values for each fiber concatenated together.  
     
     """    
-    if len(ssfm_result_list)==1:
+    number_of_fibers = len(ssfm_result_list)
+    if number_of_fibers==1:
         return ssfm_result_list[0].fiber.z_array
     
     zvals =np.array([])
-    number_of_fibers = len(ssfm_result_list)
+    
     previous_length = 0
     for i, ssfm_result in enumerate(ssfm_result_list):
         
@@ -1716,7 +1711,7 @@ def unpackZvals(ssfm_result_list):
 
        
         previous_length += ssfm_result.fiber.Length    
-        
+       
     return zvals
 
 def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
@@ -1747,7 +1742,7 @@ def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
     """  
     number_of_fibers = len(ssfm_result_list)
     
-    
+    print(f"number_of_fibers = {number_of_fibers}")
     
     matrix=np.zeros( ( len(zvals), len(  timeFreq.t )  ) )*(1+0j)
     
@@ -1766,6 +1761,7 @@ def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
         if number_of_fibers == 1:
             return sourceMatrix
         
+
         
         if i==0:
             matrix[0: len(ssfm_result.fiber.z_array)-1, :] = sourceMatrix[0: len(ssfm_result.fiber.z_array)-1, :]
@@ -1780,6 +1776,8 @@ def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
             
         starting_row +=len(ssfm_result.fiber.z_array)-1
     
+    
+
     
     return matrix        
 
@@ -1860,7 +1858,7 @@ def plotPulseMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
    
      
     zvals = unpackZvals(ssfm_result_list)
-    
+    print(f"length of zvals = {len(zvals)}")
     matrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"pulse")
     
 
@@ -1868,14 +1866,14 @@ def plotPulseMatrix2D(ssfm_result_list, nrange:int, dB_cutoff):
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(dpi=200)
     ax.set_title('Pulse Evolution (dB scale)')
-    t = timeFreq.t[Nmin:Nmax]*1e12
+    t_ps = timeFreq.t[Nmin:Nmax]*1e12
     z = zvals
-    T, Z = np.meshgrid(t, z)
+    T_ps, Z = np.meshgrid(t_ps, z)
     P=getPower(matrix[:,Nmin:Nmax]  )/np.max(getPower(matrix[:,Nmin:Nmax]))
     P[P<1e-100]=1e-100
     P = 10*np.log10(P)
     P[P<dB_cutoff]=dB_cutoff
-    surf=ax.contourf(T, Z, P,levels=40, cmap="jet")
+    surf=ax.contourf(T_ps, Z, P,levels=40, cmap="jet")
     ax.set_xlabel('Time [ps]')
     ax.set_ylabel('Distance [m]')
     cbar=fig.colorbar(surf, ax=ax)
@@ -2622,7 +2620,7 @@ if __name__ == "__main__":
     
     timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
-    beta_list = [1e-30] #Dispersion in units of s^(entry+2)/m    
+    beta_list = [10e-30] #Dispersion in units of s^(entry+2)/m    
     #beta_list = [0,0,1e-12*1e-24*1e-11] 
     
     fiber_diameter = 9e-6 #m
@@ -2633,13 +2631,13 @@ if __name__ == "__main__":
     #  Initialize fibers
     alpha_test = 0.0
     
-    numberOfSteps_test = 2**8 
+    numberOfSteps_test = 2**6 
     
     fiber_test = fiber_class(1000, numberOfSteps_test, gamma_test,   beta_list,    alpha_test  )
    
     
     
-    fiber_list = [fiber_test,fiber_test]
+    fiber_list = [fiber_test,fiber_test,fiber_test]
     fiber_span = fiber_span_class(fiber_list)
     
     
