@@ -247,7 +247,7 @@ def getEnergy(time_or_freq,amplitude_in_time_or_freq_domain):
 
 
 
-def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order):
+def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,order):
     """ 
     Creates Gaussian pulse
 
@@ -258,6 +258,7 @@ def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order):
         peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
         duration_s      (float)  : RMS width of Gaussian, i.e. time at which the amplitude is reduced by a factor exp(-0.5) = 0.6065 
         time_offset_s   (float)  : Time at which the Gaussian peaks
+        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
         chirp           (float)  : Dimensionless parameter controlling the chirp
         order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
         
@@ -268,9 +269,9 @@ def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order):
     
     
     assert 1 <= order, f"Error: Order of gaussian pulse is {order}. Must be >=1"
-    return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))
+    return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))*np.exp(-1j*2*pi*freq_offset_Hz*time_s)
 
-def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp): 
+def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp): 
     """ 
     Creates square pulse
     
@@ -281,6 +282,7 @@ def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp):
         peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
         duration_s      (float)  : Width of square pulse
         time_offset_s   (float)  : Central time of square pulse
+        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
         chirp           (float)  : Dimensionless parameter controlling the chirp
         
     Returns:
@@ -288,10 +290,10 @@ def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp):
     
     """
     
-    return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,100)
+    return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,100)*np.exp(-1j*2*pi*freq_offset_Hz*time_s)
 
 
-def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp):  
+def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp):  
     """ 
     Creates hyperbolic secant pulse
     
@@ -304,13 +306,16 @@ def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp):
         peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
         duration_s      (float)  : Width of sech pulse, i.e. time at which the amplitude is reduced by a factor sech(1) = 0.64805 
         time_offset_s   (float)  : Time at which the Gaussian peaks
+        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
         chirp           (float)  : Dimensionless parameter controlling the chirp
+        
+        
         
     Returns:
         nparray: Sech pulse in time domain in units of sqrt(W)
     
     """
-    return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)
+    return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)*np.exp(-1j*2*pi*freq_offset_Hz*time_s)
 
 
 def noise_ASE(time_s,noiseAmplitude):
@@ -334,7 +339,7 @@ def noise_ASE(time_s,noiseAmplitude):
     return randomAmplitudes*np.exp(1j*randomPhases)   
 
 
-def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,pulseType,order,noiseAmplitude):
+def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,pulseType,order,noiseAmplitude):
     """ 
     Creates pulse with the specified properties
 
@@ -347,6 +352,7 @@ def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,pulseType,order
         peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
         duration_s      (float)  : RMS width of Gaussian, i.e. time at which the amplitude is reduced by a factor exp(-0.5) = 0.6065 
         time_offset_s   (float)  : Time at which the Gaussian peaks
+        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
         chirp           (float)  : Dimensionless parameter controlling the chirp
         order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
         
@@ -358,13 +364,13 @@ def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,pulseType,order
     noise = noise_ASE(time_s,noiseAmplitude)
     
     if pulseType.lower()=="gaussian":
-        return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,order)+noise
+        return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,order)+noise
     
     if pulseType.lower()=="sech":
-        return sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp)+noise
+        return sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp)+noise
     
     if pulseType.lower()=="square":
-        return squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp)+noise
+        return squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp)+noise
     
     if pulseType.lower()=="custom":
         return noise
@@ -461,9 +467,11 @@ class fiber_class:
         total_loss_dB (float):  Length*alpha_dB_per_m
     """
     
-    def __init__(self,L,gamma,beta_list,alpha_dB_per_m):
+    def __init__(self,L,gamma,beta_list,alpha_dB_per_m,ramanModel="None"):
         """
         Constructor for the fiber_class
+        
+        
         
         Parameters:
             self
@@ -471,7 +479,15 @@ class fiber_class:
             gamma (float): Nonlinearity parameter in [1/W/m]
             beta_list (list): List of dispersion coefficients [beta2,beta3,...] [s^(entry+2)/m]
             alpha_dB_per_m (float): Attenuation coeff in [dB/m]
+            ramanModel (str) (default="None"): String to select Raman model. Default, "None", indicates that Raman should be ignored for this fiber.
+            
+            
+            
+            
         """
+        
+        
+        
         self.Length=L
         self.gamma=gamma
         
@@ -484,8 +500,30 @@ class fiber_class:
         self.alpha_Np_per_m = self.alpha_dB_per_m*np.log(10)/10.0 #Loss coeff is usually specified in dB/km, but Nepers/km is more useful for calculations
         self.total_loss_dB =  alpha_dB_per_m*self.Length
         #TODO: Make alpha frequency dependent.  
+        
+        #Default: No Raman effect
+        self.ramanModel=ramanModel
+        self.fR=0.0
+        self.tau1=0.0
+        self.tau2=0.0
+        
+        self.RamanInFreqDomain_func = lambda freq: 0.0
+        
+        if ramanModel == "Agrawal":  #Raman parameters taken from Govind P. Agrawal's book, "Nonlinear Fiber Optics". 
+            self.fR = 0.180  # Relative contribution of Raman effect to overall nonlinearity
+            self.tau1 = 12.2*1e-15 # Average angular oscillation time of molecular bonds in silica lattice. Note: 1/(2*pi*12.2fs) = 13.05THz = Typical Raman frequency
+            self.tau2 = 30.0*1e-15 # Average exponential decay time of molecular bond oscilaltions. Note: 2*1/(2*pi*30.0fs) = 10.61 THz = Typical Raman gain spectrum FWHM 
+            
+            #Frequency domain representation of Raman response taken from https://github.com/omelchert/GNLStools/blob/main/src/GNLStools.py
+            self.RamanInFreqDomain_func = lambda freq: (self.tau1**2+self.tau2**2)/(self.tau1**2*(1-1j*freq*2*pi*self.tau2)**2+self.tau2**2) #Freq domain representation of Raman response
+            
+        
+        
+        
         self.describe_fiber()
-      
+    
+    
+    
     def describe_fiber(self,destination = None):
         """
         Prints a description of the fiber to destination
@@ -504,6 +542,9 @@ class fiber_class:
         print(f'Fiber alpha_dB_per_m \t= {self.alpha_dB_per_m} ', file = destination)
         print(f'Fiber alpha_Np_per_m \t= {self.alpha_Np_per_m} ', file = destination)
         print(f'Fiber total loss [dB] \t= {self.total_loss_dB} ', file = destination)
+        print(f'Raman Model \t= {self.ramanModel}. (fR,tau1,tau2)=({self.fR:.3},{self.tau1/1e-15:.3},{self.tau2/1e-15:.3}) ', file = destination)
+        
+
         print(' ', file = destination)
 
 
@@ -545,7 +586,9 @@ class fiber_span_class:
                                          'beta7_s7_per_m',
                                          'beta8_s8_per_m',
                                          'alpha_dB_per_m',
-                                         'alpha_Np_per_m'])
+                                         'alpha_Np_per_m',
+                                         'ramanModel'
+                                         ])
                                          
         for fiber in self.fiber_list:
             fiber_df.loc[  len(fiber_df.index) ] = [fiber.Length,
@@ -558,7 +601,9 @@ class fiber_span_class:
                                                     fiber.beta_list[5],
                                                     fiber.beta_list[6],
                                                     fiber.alpha_dB_per_m,
-                                                    fiber.alpha_Np_per_m ]
+                                                    fiber.alpha_Np_per_m,
+                                                    fiber.ramanModel
+                                                    ]
         
         fiber_df.to_csv("Fiber_span.csv")
 
@@ -589,21 +634,24 @@ def load_fiber_span(path:str):
     beta8_s8_per_m = df['beta2_s8_per_m']
     
     alpha_dB_per_m = df['alpha_dB_per_m']
-    
+    ramanModel = df['ramanModel']
     
     fiber_list=[]
     
     for i in range(len(Length_m)):
+        beta_list_i = [beta2_s2_per_m[i],
+                       beta3_s3_per_m[i],
+                       beta4_s4_per_m[i],
+                       beta5_s5_per_m[i],
+                       beta6_s6_per_m[i],
+                       beta7_s7_per_m[i],
+                       beta8_s8_per_m[i]]
+        
         current_fiber = fiber_class(  Length_m[i], 
                                     gamma_per_W_per_m[i], 
-                                    beta2_s2_per_m[i],
-                                    beta3_s3_per_m[i],
-                                    beta4_s4_per_m[i],
-                                    beta5_s5_per_m[i],
-                                    beta6_s6_per_m[i],
-                                    beta7_s7_per_m[i],
-                                    beta8_s8_per_m[i],
-                                    alpha_dB_per_m[i] )
+                                    beta_list_i,
+                                    alpha_dB_per_m[i],
+                                    ramanModel[i])
         fiber_list.append( current_fiber )    
     
     return fiber_span_class(fiber_list)
@@ -630,7 +678,7 @@ class input_signal_class:
         spectrum (nparray): Numpy array containing spectral amplitude obtained from FFT of self.amplitude in [sqrt(W)/Hz]
     """
     
-    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,offset,chirp,pulseType,order,noiseAmplitude):
+    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,time_offset_s,freq_offset_Hz,chirp,pulseType,order,noiseAmplitude):
         """
         Constructor for input_signal_class
         
@@ -638,7 +686,7 @@ class input_signal_class:
             timeFreq (timeFreq_class): Contains info about discretized time and freq axes
             peak_amplitude (float): Peak amplitude of signal in [sqrt(W)]
             duration (float): Temporal duration of signal [s]
-            offset (float): Delay of signal relative to t=0 in [s]
+            time_offset_s (float): Delay of signal relative to t=0 in [s]
             chirp (float): Chirping factor of sigal 
             pulseType (str): Selects pulse type from a set of pre-defined ones. Select "custom" to define the signal manually
             order (int): For n==1 a and pulseType = "Gaussian" a regular Gaussian pulse is returned. For n>=1 return a super-Gaussian  
@@ -648,7 +696,8 @@ class input_signal_class:
         self.Amax = peak_amplitude
         self.Pmax= self.Amax**2
         self.duration=duration
-        self.offset=offset
+        self.time_offset_s=time_offset_s
+        self.freq_offset_Hz=freq_offset_Hz
         self.chirp=chirp
         self.pulseType=pulseType
         self.order=order
@@ -657,7 +706,15 @@ class input_signal_class:
         self.timeFreq=timeFreq
   
         
-        self.amplitude = getPulse(self.timeFreq.t,peak_amplitude,duration,offset,chirp,pulseType,order,noiseAmplitude)
+        self.amplitude = getPulse(self.timeFreq.t,
+                                  peak_amplitude,
+                                  duration,
+                                  time_offset_s,
+                                  freq_offset_Hz,
+                                  chirp,
+                                  pulseType,
+                                  order,
+                                  noiseAmplitude)
         
 
         if getEnergy(self.timeFreq.t, self.amplitude) == 0.0:
@@ -680,7 +737,8 @@ class input_signal_class:
         print(" ### Input Signal Parameters ###" , file = destination)
         print(f"  Pmax \t\t\t\t= {self.Pmax:.3f} W", file = destination)
         print(f"  Duration \t\t\t= {self.duration*1e12:.3f} ps", file = destination)
-        print(f"  Offset \t\t\t= {self.offset*1e12:.3f} ps", file = destination)
+        print(f"  Time offset \t\t\t= {self.time_offset_s*1e12:.3f} ps", file = destination)
+        print(f"  Freq offset \t\t\t= {self.freq_offset_Hz/1e9:.3f} GHz", file = destination)
         print(f"  Chirp \t\t\t= {self.chirp:.3f}", file = destination)
         print(f"  pulseType \t\t\t= {self.pulseType}", file = destination)
         print(f"  order \t\t\t= {self.order}", file = destination)
@@ -700,7 +758,8 @@ class input_signal_class:
         signal_df = pd.DataFrame(columns=['Amax_sqrt(W)',
                                           'Pmax_W',
                                           'duration_s',
-                                          'offset_s',
+                                          'time_offset_s',
+                                          'freq_offset_Hz',             
                                           'chirp',
                                           'pulseType',
                                           'order',
@@ -712,7 +771,8 @@ class input_signal_class:
         signal_df.loc[  len(signal_df.index) ] = [self.Amax,
                                                   self.Pmax,
                                                   self.duration,
-                                                  self.offset,
+                                                  self.time_offset_s,
+                                                  self.freq_offset_Hz,
                                                   self.chirp,
                                                   self.pulseType,
                                                   self.order,
@@ -752,7 +812,8 @@ def load_InputSignal(path):
     
     Amax_sqrt_W             = df['Amax_sqrt(W)'][0]
     duration_s              = df['duration_s'][0]
-    offset_s                = df['offset_s'][0]
+    time_offset_s           = df['time_offset_s'][0]
+    freq_offset_Hz           = df['freq_offset_Hz'][0]
     chirp                   = df['chirp'][0]
     pulseType               = df['pulseType'][0]
     order                   = int(df['order'][0])
@@ -762,7 +823,7 @@ def load_InputSignal(path):
     timeFreq = load_timeFreq( path )
     
     #Initialize class for loaded signal
-    loaded_input_signal = input_signal_class(timeFreq,Amax_sqrt_W,duration_s,offset_s,chirp,pulseType,order, noiseAmplitude_sqrt_W)
+    loaded_input_signal = input_signal_class(timeFreq,Amax_sqrt_W,duration_s,time_offset_s,freq_offset_Hz,chirp,pulseType,order, noiseAmplitude_sqrt_W)
     
     #If signal type is "custom", load the raw amplitude values
     if pulseType == "custom":
@@ -799,13 +860,7 @@ def zstep_NL(z_m,fiber:fiber_class, input_signal:input_signal_class,stepmode,ste
         float: calculated z-step in m 
     
     """
-    #If there is no nonlinearity or no dispersion, complete the whole fiber in 1 step!    
-    #TODO: Do we also need to check if alpha = 0?
-    if fiber.gamma == 0.0:  
-        return fiber.Length
-    
-    if fiber.beta_list[0] == 0.0:
-        return fiber.Length
+
     
     
     
@@ -873,7 +928,7 @@ def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,
         fiber               (fiber_class):        Class containing fiber properties
         input_signal        (input_signal_class): Class containing signal properties
         stepConfig_list     (list):               Contains stepMode, stepApproach and stepSafetyFactor
-        stepSafetyFactor    (float):              Scales down calculated step by this factor
+        fiber_index=""      (str):                Index of fiber in span as a string.
         
     Returns:
         list(nparray,nparray): List contains z_array, which are z-locations inside the fiber and dz_array, which contains step sizes 
@@ -891,36 +946,48 @@ def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,
     stepApproach=stepConfig_list[1]       
     stepSafetyFactor=stepConfig_list[2]
     
-    zinfo = (np.array([0,fiber.Length]),fiber.Length)
+    #Initialize zinfo to default 
+    zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
+    
+    number_of_beta_n_greater_than_zero = int(np.sum([beta_n!=0.0 for beta_n in fiber.beta_list]))
     
 
+    
+    if (fiber.gamma == 0.0):
+        print("There is no nonlinearity, so do all dispersion and loss in one step")
+        zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
+    elif fiber.alpha_Np_per_m == 0.0 and number_of_beta_n_greater_than_zero == 0 and fiber.ramanModel == "None":
+        print("There is no loss or dispersion, do all NL in one step.")
+        zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
 
-    if stepMode.lower() == "fixed":
+    else:
         
-        if type(stepApproach) == str:
-        
-            dz=zstep_NL(0,fiber, input_signal,stepApproach,stepSafetyFactor)
-            z_array=np.arange(0,fiber.Length,dz)
+        if stepMode.lower() == "fixed":
             
-            if z_array[-1] != fiber.Length:
-                z_array=np.append(z_array,fiber.Length)
+            if type(stepApproach) == str:
             
-            dz_array = np.diff( z_array)
+                dz=zstep_NL(0,fiber, input_signal,stepApproach,stepSafetyFactor)
+                z_array=np.arange(0,fiber.Length,dz)
+                
+                if z_array[-1] != fiber.Length:
+                    z_array=np.append(z_array,fiber.Length)
+                
+                dz_array = np.diff( z_array)
+                
+                
+            else:
+                stepApproach=int(stepApproach)
+                z_array=np.linspace(0,fiber.Length,stepApproach+1)
+                dz_array=np.ones( stepApproach)*(z_array[1]-z_array[0])            
+    
+                
+            zinfo   =(z_array,dz_array)
+            
+            
             
             
         else:
-            stepApproach=int(stepApproach)
-            z_array=np.linspace(0,fiber.Length,stepApproach+1)
-            dz_array=np.ones( stepApproach)*(z_array[1]-z_array[0])            
-
-            
-        zinfo   =(z_array,dz_array)
-        
-        
-        
-        
-    else:
-        zinfo = getVariableZsteps(fiber,input_signal,stepApproach,stepSafetyFactor)
+            zinfo = getVariableZsteps(fiber,input_signal,stepApproach,stepSafetyFactor)
         
     fig,ax = plt.subplots(dpi=200)
     ax.set_title(f"Fiber number = {fiber_index}, \n Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
@@ -1402,6 +1469,30 @@ def load_previous_run(basePath):
     return fiber_span, input_signal, stepConfig
 
 
+def NL_simple(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
+    return np.exp(1j*fiber.gamma*getPower(pulse)*dz)
+
+def NL_full(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
+    
+    fR = fiber.fR
+    freq = timeFreq.f
+    t = timeFreq.t
+    
+    f0 = timeFreq.centerFrequency
+    RamanInFreqDomain=fiber.RamanInFreqDomain_func(freq)
+
+    
+    NR_func = lambda current_pulse: (1-fR)*getPower(current_pulse)*current_pulse + fR*current_pulse*getPulseFromSpectrum(freq,getSpectrumFromPulse(t,getPower(current_pulse))*RamanInFreqDomain)
+    
+    NR_in_freq_domain = 1j*dz*fiber.gamma*(1.+freq/f0)*getPulseFromSpectrum(freq,NR_func(getSpectrumFromPulse(timeFreq.t, pulse)))
+    
+    
+    return np.exp( getPulseFromSpectrum(freq, NR_in_freq_domain) ) 
+    
+    
+
+    
+
 def SSFM(fiber_span:fiber_span_class,
          input_signal:input_signal_class,
          stepConfig=("fixed","cautious",10.0),
@@ -1427,6 +1518,11 @@ def SSFM(fiber_span:fiber_span_class,
     
     """
     print("########### Initializing SSFM!!! ###########")
+    
+    t = input_signal.timeFreq.t
+    f = input_signal.timeFreq.f
+    
+    
     
     #Create output directory, switch to it and return appropriate paths and current time
     dirs , current_time = createOutputDirectory(experimentName)
@@ -1499,29 +1595,38 @@ def SSFM(fiber_span:fiber_span_class,
         
         #Pre-calculate effect of dispersion and loss as it's the same everywhere
         disp_and_loss=np.exp((1j*dispterm-fiber.alpha_Np_per_m/2))
-        
+        disp_and_loss_half_step = disp_and_loss**0.5
         #Precalculate constants for nonlinearity
-        nonlinearity=1j*fiber.gamma
+        
+        NL_function = NL_simple
+        
+        if fiber.ramanModel != "None":
+            NL_function = NL_full
+        
+        
         
         #Initialize arrays to store temporal profile and spectrum while calculating SSFM
-        pulse    = np.copy(input_signal.amplitude )
-        spectrum = np.copy(input_signal.spectrum )
+        
+        spectrum = np.copy(input_signal.spectrum )*disp_and_loss_half_step
+        pulse    = getPulseFromSpectrum(input_signal.timeFreq.f, spectrum)
+        
         
         print(f"Running SSFM with nsteps = {len(zinfo[1])}")
         N_steps = len(zinfo[1])
         updates = 0
         for z_step_index, dz in enumerate(zinfo[1]):   
-            pulse*=np.exp(nonlinearity*getPower(pulse)*dz) #Apply nonlinearity
+            pulse*=NL_function(fiber,input_signal.timeFreq,pulse,dz) #Apply nonlinearity
             
-            spectrum = getSpectrumFromPulse(input_signal.timeFreq.t, pulse)*(disp_and_loss**dz) #Go to spectral domain and apply disp and loss
+            spectrum = getSpectrumFromPulse(t, pulse)*(disp_and_loss**dz) #Go to spectral domain and apply disp and loss
             
             
-            pulse=getPulseFromSpectrum(input_signal.timeFreq.f, spectrum) #Return to time domain 
+            pulse=getPulseFromSpectrum(f, spectrum) #Return to time domain 
             
             
             #Store results and repeat
-            ssfm_result.pulseMatrix[z_step_index+1,:]=pulse
-            ssfm_result.spectrumMatrix[z_step_index+1,:]=spectrum
+            ssfm_result.spectrumMatrix[z_step_index+1,:]=spectrum*disp_and_loss_half_step
+            ssfm_result.pulseMatrix[z_step_index+1,:]=getPulseFromSpectrum(f, ssfm_result.spectrumMatrix[z_step_index+1,:])
+            
             
 
 
@@ -1939,16 +2044,18 @@ def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
     zvals = unpackZvals(ssfm_result_list)
     
     
+    
+    
     P_initial=getPower(ssfm_result_list[0].spectrumMatrix[0,Nmin:Nmax])
     P_final=getPower(ssfm_result_list[-1].spectrumMatrix[-1,Nmin:Nmax])
 
 
-    
+
     Pmax_initial = np.max(P_initial)
     Pmax_final = np.max(P_final)
     Pmax=np.max([Pmax_initial,Pmax_final]) 
 
-    f=(timeFreq .f[Nmin:Nmax]+center_freq_Hz)/1e12
+    f=(timeFreq.f[Nmin:Nmax])/1e12#+center_freq_Hz
     
     scalingFactor,prefix=getUnitsFromValue(np.max(zvals))
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -2321,7 +2428,9 @@ def plotEverythingAboutResult(ssfm_result_list,
                               nrange_pulse, 
                               dB_cutoff_pulse, 
                               nrange_spectrum, 
-                              dB_cutoff_spectrum, 
+                              dB_cutoff_spectrum,
+                              skip_3D_plot_flag = False,
+                              skip_chirp_plot_flag = False,
                               **kwargs):
     """ 
     Generates all plots of pulse amplitudes, spectra etc. throughout fiber span
@@ -2375,44 +2484,42 @@ def waveletTransform(timeFreq:timeFreq_class,
     Nmin_pulse = np.max([int(timeFreq.number_of_points/2-nrange_pulse),0])
     Nmax_pulse = np.min([int(timeFreq.number_of_points/2+nrange_pulse),timeFreq.number_of_points-1])    
     
-    Tmin = timeFreq.t[Nmin_pulse]
+
     Tmax = timeFreq.t[Nmax_pulse]
     
-    Nmin_spec = np.max([int(timeFreq.number_of_points/2-nrange_spectrum),0])
-    Nmax_spec = np.min([int(timeFreq.number_of_points/2+nrange_spectrum),timeFreq.number_of_points-1])    
-    
-    
-    Fmin = timeFreq.f[Nmin_spec]
-    Fmax = timeFreq.f[Nmax_spec]
+   
+
     
     t = timeFreq.t[Nmin_pulse:Nmax_pulse]
-    #f = np.arange(1,1e6,1000) 
-    # TODO: f should be "duration of wavelet" not its frequency!!!
-    #wavelet_durations = np.linspace(0.01e-9,0.1e-9,1000)
-    wavelet_durations = np.linspace(0.01e-9,1e-9,1000)
+
+    wavelet_durations = np.linspace((t[1]-t[0])*10,Tmax,1000)
+    
+    print((t[1]-t[0])*100,Tmax)
+    print(1/Tmax/1e9,1/((t[1]-t[0])*100)/1e9)
     
     dt_wavelet = wavelet_durations[1]-wavelet_durations[0]
     
-    
-    cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], signal.morlet2, wavelet_durations/dt_wavelet,dtype=complex)
     
     plt.figure()
     plt.plot(t,np.real(pulse[Nmin_pulse:Nmax_pulse]))
     plt.plot(t,np.imag(pulse[Nmin_pulse:Nmax_pulse]))
     plt.show()
     
-        
+            
     plt.figure()
     plt.plot(t,getChirp(t, pulse[Nmin_pulse:Nmax_pulse])/1e9)
     plt.ylabel('Chirp [GHz]')
     plt.show()
     
+    cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], signal.morlet2, wavelet_durations,dtype=complex)
     
-    cwtmatr_yflip = np.flipud(cwtmatr)
+
+    
     
     
       
     Z = np.abs(cwtmatr)**2
+    print(np.max(Z))
     Z /= np.max(Z)
     
     Z[Z<10**(dB_cutoff/10)] = 10**(dB_cutoff/10)
@@ -2495,7 +2602,8 @@ def freqBWtoWavelengthBW(freq_Hz,freqBW_Hz):
     return c*freqBW_Hz/freq_Hz**2
 
 
-
+def getGammaFromFiberParams(wavelength_m,n2_m2_W,coreDiameter_m):
+    return 2*pi/wavelength_m*n2_m2_W/( pi* coreDiameter_m**2/4  )
   
 
 if __name__ == "__main__":
@@ -2504,17 +2612,38 @@ if __name__ == "__main__":
     
     
     N  = 2**16 #Number of points
-    dt = 100e-15 #Time resolution [s] 
+    dt = 1e-15 #Time resolution [s] 
     
-    centerWavelength=1550e-9
+    centerWavelength = 426.9e-9 #laser wl in m  
     centerFreq_test=wavelengthToFreq(centerWavelength)
-    
     
     timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
+    beta_list = [1e-30] #Dispersion in units of s^(entry+2)/m    
+    #beta_list = [0,0,1e-12*1e-24*1e-11] 
+    
+    fiber_diameter = 9e-6 #m
+    n2_silica=2.2e-20 #m**2/W
+    
+    gamma_test = getGammaFromFiberParams(centerWavelength,n2_silica,fiber_diameter)
+    
+    #  Initialize fibers
+    alpha_test = 0.0
+    fiber_test = fiber_class(1000, gamma_test,   beta_list,    alpha_test  )
+   
+    
+    
+    fiber_list = [fiber_test]
+    fiber_span = fiber_span_class(fiber_list)
+    
+    
+    
+    
     testAmplitude = np.sqrt(1)                    #Amplitude in units of sqrt(W)
-    testDuration  =2**8*dt   #Pulse 1/e^2 duration [s]
-    testOffset    = 0                       #Time offset
+    testDuration  =1e-12   #Pulse 1/e^2 duration [s]
+    testTimeOffset    = 0                       #Time offset
+    testFreqOffset    = 0                       #Time offset
+    
     testChirp = 0
     testPulseType='gaussian' 
     testOrder = 1
@@ -2524,7 +2653,8 @@ if __name__ == "__main__":
     testInputSignal = input_signal_class(timeFreq_test, 
                                           testAmplitude ,
                                           testDuration,
-                                          testOffset,
+                                          testTimeOffset,
+                                          testFreqOffset,                                        
                                           testChirp,
                                           testPulseType,
                                           testOrder,
@@ -2533,29 +2663,24 @@ if __name__ == "__main__":
     #testInputSignal.amplitude = np.cos(2*pi*5e9*testInputSignal.timeFreq.t)*testInputSignal.amplitude
     #testInputSignal.spectrum  = getSpectrumFromPulse(testInputSignal.timeFreq.t, testInputSignal.amplitude) 
       
-    beta_list = [100e3*1e-30] #Dispersion in units of s^(entry+2)/m    
-    #beta_list = [0,0,1e-12*1e-24*1e-11] 
     
-    #  Initialize fibers
-    fiber_test = fiber_class(3e3, 1e-3,   beta_list,    0  )
-   
-    
-    
-    fiber_list = [fiber_test]
-    fiber_span = fiber_span_class(fiber_list)
     
     
 
     
     testSafetyFactor = 10
-    testStepConfig=("fixed",2**9,testSafetyFactor)
+    testStepConfig=("fixed",2**8,testSafetyFactor)
 
 
 
 
-    #expName="SecondOrderDispersion"
+    expName="Raman_development"
     #Run SSFM
-    ssfm_result_list = SSFM(fiber_span,testInputSignal,stepConfig=testStepConfig,showProgressFlag=True)
+    ssfm_result_list = SSFM(fiber_span,
+                            testInputSignal,
+                            stepConfig=testStepConfig,
+                            showProgressFlag=True,
+                            experimentName=expName)
     
     
     
@@ -2564,9 +2689,17 @@ if __name__ == "__main__":
     cutoff_test_pulse=-60
 
     #Plot pulses
-    nrange_test_spectrum=200
+    nrange_test_spectrum=int(1000)
     cutoff_test_spectrum=-60
-
+    
+    #plotFirstAndLastPulse(ssfm_result_list,nrange_test_pulse, cutoff_test_pulse)
+    #plotFirstAndLastSpectrum(ssfm_result_list, nrange_test_spectrum,cutoff_test_spectrum)
+    
+    # plotEverythingAboutSpectra(ssfm_result_list,
+    #                                 nrange_test_spectrum, 
+    #                                 cutoff_test_spectrum)
+    
+    
     plotEverythingAboutResult(ssfm_result_list,
                               nrange_test_pulse,
                               cutoff_test_pulse,
@@ -2576,10 +2709,10 @@ if __name__ == "__main__":
     
     #makeChirpGif(ssfm_result_list,nrange_test_pulse,chirpRange=[-20,20],framerate=30)
     
-    waveletTransform(ssfm_result_list[0].input_signal.timeFreq,
-                      ssfm_result_list[0].pulseMatrix[-1,:], 
-                      nrange_test_pulse,
-                      nrange_test_spectrum,
-                      cutoff_test_pulse )
+    # waveletTransform(ssfm_result_list[0].input_signal.timeFreq,
+    #                   ssfm_result_list[0].pulseMatrix[0,:], 
+    #                   nrange_test_pulse,
+    #                   nrange_test_spectrum,
+    #                   cutoff_test_pulse )
     
     
