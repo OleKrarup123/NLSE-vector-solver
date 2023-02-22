@@ -460,6 +460,7 @@ class fiber_class:
     
     Attributes:
         Length (float): Length of fiber in [m]
+        numberOfSteps (int): Number of identical steps the fiber is divided into
         gamma (float): Nonlinearity parameter in [1/W/m]
         beta_list (list): List of dispersion coefficients [beta2,beta3,...] [s^(entry+2)/m]
         alpha_dB_per_m (float): Attenuation coeff in [dB/m]
@@ -467,7 +468,7 @@ class fiber_class:
         total_loss_dB (float):  Length*alpha_dB_per_m
     """
     
-    def __init__(self,L,gamma,beta_list,alpha_dB_per_m,ramanModel="None"):
+    def __init__(self,L,numberOfSteps,gamma,beta_list,alpha_dB_per_m,ramanModel="None"):
         """
         Constructor for the fiber_class
         
@@ -476,6 +477,7 @@ class fiber_class:
         Parameters:
             self
             L (float): Length of fiber in [m]
+            numberOfSteps (int): Number of identical steps the fiber is divided into
             gamma (float): Nonlinearity parameter in [1/W/m]
             beta_list (list): List of dispersion coefficients [beta2,beta3,...] [s^(entry+2)/m]
             alpha_dB_per_m (float): Attenuation coeff in [dB/m]
@@ -489,6 +491,10 @@ class fiber_class:
         
         
         self.Length=L
+        self.numberOfSteps = int(numberOfSteps)
+        self.z_array=np.linspace(0,self.Length,self.numberOfSteps+1)
+        self.dz=self.z_array[1]-self.z_array[0]
+        
         self.gamma=gamma
         
         #Pad list of betas so we always have terms up to 8th order 
@@ -534,6 +540,9 @@ class fiber_class:
         """
         print(' ### Characteristic parameters of fiber: ###', file = destination)
         print(f'Fiber Length [km] \t= {self.Length/1e3} ', file = destination)
+        print(f'Number of Steps \t= {self.numberOfSteps} ', file = destination)
+        print(f'dz [m] \t= {self.dz} ', file = destination)
+
         print(f'Fiber gamma [1/W/m] \t= {self.gamma} ', file = destination)
         
         for i, beta_n in enumerate(beta_list):
@@ -576,7 +585,8 @@ class fiber_span_class:
         Parameters:
             self
         """
-        fiber_df = pd.DataFrame(columns=['Length_m', 
+        fiber_df = pd.DataFrame(columns=['Length_m',
+                                         'numberOfSteps',
                                          'gamma_per_W_per_m',
                                          'beta2_s2_per_m',
                                          'beta3_s3_per_m',
@@ -592,6 +602,7 @@ class fiber_span_class:
                                          
         for fiber in self.fiber_list:
             fiber_df.loc[  len(fiber_df.index) ] = [fiber.Length,
+                                                    fiber.numberOfSteps,
                                                     fiber.gamma,
                                                     fiber.beta_list[0],
                                                     fiber.beta_list[1],
@@ -624,6 +635,7 @@ def load_fiber_span(path:str):
     """    
     df = pd.read_csv(path+'\\Fiber_span.csv')
     Length_m = df['Length_m']
+    numberOfSteps = df['numberOfSteps']
     gamma_per_W_per_m = df['gamma_per_W_per_m']
     beta2_s2_per_m = df['beta2_s2_per_m']
     beta3_s3_per_m = df['beta2_s3_per_m']
@@ -647,7 +659,8 @@ def load_fiber_span(path:str):
                        beta7_s7_per_m[i],
                        beta8_s8_per_m[i]]
         
-        current_fiber = fiber_class(  Length_m[i], 
+        current_fiber = fiber_class(  Length_m[i],
+                                    numberOfSteps[i],
                                     gamma_per_W_per_m[i], 
                                     beta_list_i,
                                     alpha_dB_per_m[i],
@@ -916,104 +929,104 @@ def getVariableZsteps( fiber:fiber_class, input_signal:input_signal_class,stepmo
     
     return (z_array, dz_array)
 
-def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,fiber_index=""):
-    """ 
-    Decides whether to use fixed or variable step size and returns steps.
+# def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,fiber_index=""):
+#     """ 
+#     Decides whether to use fixed or variable step size and returns steps.
     
-    This function either calls getVariableZsteps to get variable z-steps or simply generates
-    fixed z-steps based on the number of steps specified. Also plots and saves charts of 
-    z-locations and z-step sizes for future reference.     
+#     This function either calls getVariableZsteps to get variable z-steps or simply generates
+#     fixed z-steps based on the number of steps specified. Also plots and saves charts of 
+#     z-locations and z-step sizes for future reference.     
     
-    Parameters:
-        fiber               (fiber_class):        Class containing fiber properties
-        input_signal        (input_signal_class): Class containing signal properties
-        stepConfig_list     (list):               Contains stepMode, stepApproach and stepSafetyFactor
-        fiber_index=""      (str):                Index of fiber in span as a string.
+#     Parameters:
+#         fiber               (fiber_class):        Class containing fiber properties
+#         input_signal        (input_signal_class): Class containing signal properties
+#         stepConfig_list     (list):               Contains stepMode, stepApproach and stepSafetyFactor
+#         fiber_index=""      (str):                Index of fiber in span as a string.
         
-    Returns:
-        list(nparray,nparray): List contains z_array, which are z-locations inside the fiber and dz_array, which contains step sizes 
-    """    
-    current_dir=os.getcwd()+'\\'
+#     Returns:
+#         list(nparray,nparray): List contains z_array, which are z-locations inside the fiber and dz_array, which contains step sizes 
+#     """    
+#     current_dir=os.getcwd()+'\\'
     
-    newFolderName = "Z-step-graphs\\"
-    zStepFolder = current_dir + newFolderName
+#     newFolderName = "Z-step-graphs\\"
+#     zStepFolder = current_dir + newFolderName
     
-    os.makedirs(zStepFolder,exist_ok=True)
-    os.chdir(zStepFolder)
+#     os.makedirs(zStepFolder,exist_ok=True)
+#     os.chdir(zStepFolder)
     
     
-    stepMode=stepConfig_list[0]
-    stepApproach=stepConfig_list[1]       
-    stepSafetyFactor=stepConfig_list[2]
+#     stepMode=stepConfig_list[0]
+#     stepApproach=stepConfig_list[1]       
+#     stepSafetyFactor=stepConfig_list[2]
     
-    #Initialize zinfo to default 
-    zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
+#     #Initialize zinfo to default 
+#     zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
     
-    number_of_beta_n_greater_than_zero = int(np.sum([beta_n!=0.0 for beta_n in fiber.beta_list]))
+#     number_of_beta_n_greater_than_zero = int(np.sum([beta_n!=0.0 for beta_n in fiber.beta_list]))
     
 
     
-    if (fiber.gamma == 0.0):
-        print("There is no nonlinearity, so do all dispersion and loss in one step")
-        zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
-    elif fiber.alpha_Np_per_m == 0.0 and number_of_beta_n_greater_than_zero == 0 and fiber.ramanModel == "None":
-        print("There is no loss or dispersion, do all NL in one step.")
-        zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
+#     if (fiber.gamma == 0.0):
+#         print("There is no nonlinearity, so do all dispersion and loss in one step")
+#         zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
+#     elif fiber.alpha_Np_per_m == 0.0 and number_of_beta_n_greater_than_zero == 0 and fiber.ramanModel == "None":
+#         print("There is no loss or dispersion, do all NL in one step.")
+#         zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
 
-    else:
+#     else:
         
-        if stepMode.lower() == "fixed":
+#         if stepMode.lower() == "fixed":
             
-            if type(stepApproach) == str:
+#             if type(stepApproach) == str:
             
-                dz=zstep_NL(0,fiber, input_signal,stepApproach,stepSafetyFactor)
-                z_array=np.arange(0,fiber.Length,dz)
+#                 dz=zstep_NL(0,fiber, input_signal,stepApproach,stepSafetyFactor)
+#                 z_array=np.arange(0,fiber.Length,dz)
                 
-                if z_array[-1] != fiber.Length:
-                    z_array=np.append(z_array,fiber.Length)
+#                 if z_array[-1] != fiber.Length:
+#                     z_array=np.append(z_array,fiber.Length)
                 
-                dz_array = np.diff( z_array)
+#                 dz_array = np.diff( z_array)
                 
                 
-            else:
-                stepApproach=int(stepApproach)
-                z_array=np.linspace(0,fiber.Length,stepApproach+1)
-                dz_array=np.ones( stepApproach)*(z_array[1]-z_array[0])            
+#             else:
+#                 stepApproach=int(stepApproach)
+#                 z_array=np.linspace(0,fiber.Length,stepApproach+1)
+#                 dz_array=np.ones( stepApproach)*(z_array[1]-z_array[0])            
     
                 
-            zinfo   =(z_array,dz_array)
+#             zinfo   =(z_array,dz_array)
             
             
             
             
-        else:
-            zinfo = getVariableZsteps(fiber,input_signal,stepApproach,stepSafetyFactor)
+#         else:
+#             zinfo = getVariableZsteps(fiber,input_signal,stepApproach,stepSafetyFactor)
         
-    fig,ax = plt.subplots(dpi=200)
-    ax.set_title(f"Fiber number = {fiber_index}, \n Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
-    ax.plot(zinfo[0]/1e3,'b.',label = f"z-locs ({len(zinfo[0])})")
+#     fig,ax = plt.subplots(dpi=200)
+#     ax.set_title(f"Fiber number = {fiber_index}, \n Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
+#     ax.plot(zinfo[0]/1e3,'b.',label = f"z-locs ({len(zinfo[0])})")
 
-    ax.set_xlabel('Entry')
-    ax.set_ylabel('z-location [km]')
-    ax.tick_params(axis='y',labelcolor='b')
+#     ax.set_xlabel('Entry')
+#     ax.set_ylabel('z-location [km]')
+#     ax.tick_params(axis='y',labelcolor='b')
     
-    ax2=ax.twinx()
-    ax2.plot(zinfo[1]/1e3,'r.',label = f"$\Delta$z-steps ({len(zinfo[1])})")
-    ax2.set_ylabel('$\Delta$z [km]')
-    ax2.tick_params(axis='y',labelcolor='r')
+#     ax2=ax.twinx()
+#     ax2.plot(zinfo[1]/1e3,'r.',label = f"$\Delta$z-steps ({len(zinfo[1])})")
+#     ax2.set_ylabel('$\Delta$z [km]')
+#     ax2.tick_params(axis='y',labelcolor='r')
     
-    fig.legend(bbox_to_anchor=(1.3,0.8))
+#     fig.legend(bbox_to_anchor=(1.3,0.8))
     
-    plt.savefig(f'Z-step_chart_{fiber_index}.png', 
-                bbox_inches ="tight",
-                pad_inches = 1,
-                orientation ='landscape')
-    plt.show()
+#     plt.savefig(f'Z-step_chart_{fiber_index}.png', 
+#                 bbox_inches ="tight",
+#                 pad_inches = 1,
+#                 orientation ='landscape')
+#     plt.show()
     
     
-    os.chdir(current_dir)
+#     os.chdir(current_dir)
     
-    return zinfo
+#     return zinfo
    
 
 
@@ -1026,15 +1039,13 @@ class ssfm_result_class:
     Attributes:
         input_signal ( input_signal_class ): Signal launched into fiber
         fiber ( fiber_class ): Fiber signal was sent through
-        stepConfig ( list ): Parameters for choosing step size
-        zinfo ( list ): z-locations and z-steps throughout the fiber
         experimentName ( str ): Name of experiment
         dirs ( tuple ): Contains directory where current script is located and the directory where output is to be saved
         
         pulseMatrix ( nparray ): Amplitude of pulse at every z-location in fiber
         spectrumMatrix ( nparray ): Spectrum of pulse at every z-location in fiber       
     """
-    def __init__(self, input_signal:input_signal_class, fiber:fiber_class,stepConfig,zinfo,experimentName,directories):
+    def __init__(self, input_signal:input_signal_class, fiber:fiber_class,experimentName,directories):
 
         """
         Constructor for ssfm_result_class. 
@@ -1042,19 +1053,15 @@ class ssfm_result_class:
        Parameters:
             input_signal ( input_signal_class ): Signal launched into fiber
             fiber ( fiber_class ): Fiber signal was sent through
-            stepConfig ( list ): Parameters for choosing step size
-            zinfo ( list ): z-locations and z-steps throughout the fiber
             experimentName ( str ): Name of experiment
             directories ( tuple ): Contains directory where current script is located and the directory where output is to be saved 
         """ 
         self.input_signal = input_signal
         self.fiber = fiber
-        self.stepConfig = stepConfig
-        self.zinfo = zinfo
         self.experimentName=experimentName
         self.dirs = directories
 
-        self.pulseMatrix = np.zeros((len(self.zinfo[0]),input_signal.timeFreq.number_of_points ) )*(1+0j)
+        self.pulseMatrix = np.zeros((len(fiber.z_array),input_signal.timeFreq.number_of_points ) )*(1+0j)
         self.spectrumMatrix = np.copy(self.pulseMatrix)
         
         self.pulseMatrix[0,:]=np.copy(input_signal.amplitude)   
@@ -1147,7 +1154,7 @@ def getUnitsFromValue(value):
 
     
 
-def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zinfo,fiber_index,destination=None):    
+def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,fiber_index,destination=None):    
     """ 
     Computes, prints and plots characteristic distances (L_eff, L_D, L_NL)
     
@@ -1160,7 +1167,6 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
     Parameters:
         fiber (fiber_class): Class containing info about the current fiber
         input_signal (input_signal_class): Class containing info about input signal
-        zinfo (list(nparray,nparray)  ): Contains the z_array and dz_array
         fiber_index (int): Index of fiber in the span
         destination (std) (optional): If None, print to console. Otherwise, print to file and make plot
         
@@ -1288,10 +1294,8 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
             ax.barh("OWB Length",Length_wave_break/scalingfactor, color ='C6')
     
     if destination != None:
-        ax.barh("Maximum $\Delta$z",np.max(zinfo[1])/scalingfactor, color ='C7')
-        ax.barh("Minimum $\Delta$z",np.min(zinfo[1])/scalingfactor, color ='C8')
-        length_list=np.append(length_list,np.max(zinfo[1]))
-        length_list=np.append(length_list,np.min(zinfo[1]))
+        ax.barh("$\Delta$z",fiber.dz/scalingfactor, color ='C7')
+        length_list=np.append(length_list,fiber.dz)
             
         ax.set_xscale('log')
         ax.set_xlabel(f'Length [{prefix}m]')
@@ -1311,7 +1315,7 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,zi
 
    
 
-def describe_run( current_time, current_fiber:fiber_class,  current_input_signal:input_signal_class,current_stepConfig, zinfo,fiber_index=""  ,destination = None):
+def describe_run( current_time, current_fiber:fiber_class,  current_input_signal:input_signal_class,fiber_index=""  ,destination = None):
     """ 
     Prints info about fiber, characteristic lengths and stepMode
     
@@ -1321,8 +1325,6 @@ def describe_run( current_time, current_fiber:fiber_class,  current_input_signal
         current_time           (datetime): Current date and time at which run was initiated
         current_fiber          (fiber_class): Info about current fiber 
         current_input_signal   (input_signal_class): Info about input signal
-        current_stepConfig     (list): Parameters for choosing step size
-        zinfo                  (list(nparray, nparray)): z_array and dz_array
         fiber_index=""         (str) (optional): String of integer indexing fiber in fiber span 
         destination = None     (class '_io.TextIOWrapper') (optional): If None, print to console. Else, print to specified file
         
@@ -1333,15 +1335,13 @@ def describe_run( current_time, current_fiber:fiber_class,  current_input_signal
     print(' ', file = destination)
     
     
-    describe_sim_parameters(current_fiber,current_input_signal,zinfo,fiber_index,destination=destination)
+    describe_sim_parameters(current_fiber,current_input_signal,fiber_index,destination=destination)
     
     
-    print(' ', file = destination)
-    print(f"Stepmode = ({current_stepConfig[0]},{current_stepConfig[1]}), stepSafetyFactor = {current_stepConfig[2]}", file = destination)
-    print(' ', file = destination)
 
 
-def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_signal_class,stepConfig, zinfo,fiber_index=""):
+
+def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_signal_class,fiber_index=""):
     """ 
     Prints info about fiber, characteristic lengths and stepMode
     
@@ -1351,8 +1351,6 @@ def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_sig
         current_time            (datetime): Current date and time at which run was initiated
         fiber                   (fiber_class): Info about current fiber 
         input_signal            (input_signal_class): Info about input signal
-        stepConfig              (list): Parameters for choosing step size
-        zinfo                   (list(nparray, nparray)): z_array and dz_array
         fiber_index=""          (str) (optional): String of integer indexing fiber in fiber span 
         
     Returns:
@@ -1361,10 +1359,10 @@ def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_sig
     with open(f"input_config_description_{fiber_index}.txt","w") as output_file:
             #Print info to terminal
 
-            describe_run( current_time, fiber,  input_signal,stepConfig, zinfo,fiber_index=fiber_index)
+            describe_run( current_time, fiber,  input_signal,fiber_index=fiber_index)
             
             #Print info to file
-            describe_run( current_time, fiber,  input_signal,stepConfig,zinfo, fiber_index=fiber_index  ,destination = output_file)    
+            describe_run( current_time, fiber,  input_signal, fiber_index=fiber_index  ,destination = output_file)    
 
 
 def createOutputDirectory(experimentName):
@@ -1495,7 +1493,6 @@ def NL_full(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
 
 def SSFM(fiber_span:fiber_span_class,
          input_signal:input_signal_class,
-         stepConfig=("fixed","cautious",10.0),
          experimentName ="most_recent_run",
          showProgressFlag = False):
     """ 
@@ -1510,7 +1507,7 @@ def SSFM(fiber_span:fiber_span_class,
     Parameters:
         fiber_span (fiber_span_class): Class holding fibers through which the signal is propagated
         input_signal (input_signal_class): Class holding info about initial input signal
-        stepConfig=("fixed","cautious",10.0) (optional): Parameters for determining step size. 
+        numberOfSteps = 2**10 (optional): Number of z-steps taken during SSFM. 
         experimentName ="most_recent_run" (optional): Name of folder for present simulation.
         
     Returns:
@@ -1543,14 +1540,14 @@ def SSFM(fiber_span:fiber_span_class,
     #Save input signal parameters
     input_signal.saveInputSignal()
     
-    saveStepConfig(stepConfig)
+    #saveStepConfig(stepConfig)
     
     
     
     #Return to main output directory
     os.chdir(current_dir)
     
-    
+    #TODO: Make sure code handles current_input_signal correctly for concatenated fibers!!!
     current_input_signal = input_signal
     
     ssfm_result_list = []
@@ -1563,11 +1560,12 @@ def SSFM(fiber_span:fiber_span_class,
  
         
         #Get z-steps and z-locations throughout fiber and save plots of these values to new folder
-        zinfo = getZsteps(fiber,current_input_signal,stepConfig,fiber_index=str(fiber_index))
+        #zinfo = getZsteps(fiber,current_input_signal,stepConfig,fiber_index=str(fiber_index))
         
+
         
         #Initialize arrays to store pulse and spectrum throughout fiber
-        ssfm_result = ssfm_result_class(current_input_signal,fiber,stepConfig,zinfo,experimentName,dirs)
+        ssfm_result = ssfm_result_class(current_input_signal,fiber,experimentName,dirs)
 
     
         newFolderName = "Length_info\\"
@@ -1576,7 +1574,7 @@ def SSFM(fiber_span:fiber_span_class,
         os.chdir(newFolderPath)
 
         #Print simulation info to both terminal and .txt file in output folder
-        describeInputConfig(current_time, fiber,  current_input_signal,stepConfig, zinfo,fiber_index=str(fiber_index))
+        describeInputConfig(current_time, fiber,  current_input_signal,fiber_index=str(fiber_index))
         
         #Return to main output directory
         os.chdir(current_dir)
@@ -1594,7 +1592,7 @@ def SSFM(fiber_span:fiber_span_class,
        
         
         #Pre-calculate effect of dispersion and loss as it's the same everywhere
-        disp_and_loss=np.exp((1j*dispterm-fiber.alpha_Np_per_m/2))
+        disp_and_loss=np.exp(fiber.dz*(1j*dispterm-fiber.alpha_Np_per_m/2))
         disp_and_loss_half_step = disp_and_loss**0.5
         #Precalculate constants for nonlinearity
         
@@ -1610,14 +1608,14 @@ def SSFM(fiber_span:fiber_span_class,
         spectrum = np.copy(input_signal.spectrum )*disp_and_loss_half_step
         pulse    = getPulseFromSpectrum(input_signal.timeFreq.f, spectrum)
         
-        
-        print(f"Running SSFM with nsteps = {len(zinfo[1])}")
-        N_steps = len(zinfo[1])
+    
+
+        print(f"Running SSFM with nsteps = {fiber.numberOfSteps}")
         updates = 0
-        for z_step_index, dz in enumerate(zinfo[1]):   
-            pulse*=NL_function(fiber,input_signal.timeFreq,pulse,dz) #Apply nonlinearity
+        for z_step_index in range(fiber.numberOfSteps):   
+            pulse*=NL_function(fiber,input_signal.timeFreq,pulse,fiber.dz) #Apply nonlinearity
             
-            spectrum = getSpectrumFromPulse(t, pulse)*(disp_and_loss**dz) #Go to spectral domain and apply disp and loss
+            spectrum = getSpectrumFromPulse(t, pulse)*(disp_and_loss) #Go to spectral domain and apply disp and loss
             
             
             pulse=getPulseFromSpectrum(f, spectrum) #Return to time domain 
@@ -1630,7 +1628,7 @@ def SSFM(fiber_span:fiber_span_class,
             
 
 
-            finished = 100*(z_step_index/N_steps)
+            finished = 100*(z_step_index/fiber.numberOfSteps)
             if divmod(finished, 10)[0] > updates and showProgressFlag == True:
                 updates += 1
                 print(f"SSFM progress through fiber number {fiber_index+1} = {np.floor(finished):.2f}%")
@@ -1640,11 +1638,14 @@ def SSFM(fiber_span:fiber_span_class,
         
         ssfm_result_list.append(ssfm_result)
         
-        current_input_signal.amplitude =np.copy(pulse)
-        current_input_signal.Pmax = np.max(getPower(pulse))
-        #Exit current output directory and return to base directory.
-    
+        #Take pulse at output of this fiber and feed it into the next one
+        current_input_signal.amplitude =np.copy(ssfm_result.pulseMatrix[z_step_index+1,:])
+        current_input_signal.Pmax = np.max(getPower(current_input_signal.amplitude))
+        
+
     print("Finished running SSFM!!!")
+    
+    #Exit current output directory and return to base directory.
     os.chdir(base_dir)
         
         
@@ -1695,7 +1696,7 @@ def unpackZvals(ssfm_result_list):
     
     """    
     if len(ssfm_result_list)==1:
-        return ssfm_result_list[0].zinfo[0]
+        return ssfm_result_list[0].fiber.z_array
     
     zvals =np.array([])
     number_of_fibers = len(ssfm_result_list)
@@ -1704,13 +1705,15 @@ def unpackZvals(ssfm_result_list):
         
     
         if i==0:
-            zvals = np.copy(ssfm_result.zinfo[0][0:-1])
+            zvals = np.copy(ssfm_result.fiber.z_array[0:-1])
             
         elif  (i>0) and (i< number_of_fibers-1):
-            zvals = np.append(zvals,ssfm_result.zinfo[0][0:-1]+previous_length) 
+            zvals = np.append(zvals,ssfm_result.fiber.z_array[0:-1]+previous_length) 
+            
             
         elif i==number_of_fibers-1:
-            zvals = np.append(zvals,ssfm_result.zinfo[0]+previous_length) 
+            zvals = np.append(zvals,ssfm_result.fiber.z_array+previous_length) 
+
        
         previous_length += ssfm_result.fiber.Length    
         
@@ -1765,17 +1768,17 @@ def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
         
         
         if i==0:
-            matrix[0: len(ssfm_result.zinfo[0])-1, :] = sourceMatrix[0: len(ssfm_result.zinfo[0])-1, :]
+            matrix[0: len(ssfm_result.fiber.z_array)-1, :] = sourceMatrix[0: len(ssfm_result.fiber.z_array)-1, :]
             
         elif  (i>0) and (i< number_of_fibers-1):
 
-            matrix[starting_row : starting_row + len(ssfm_result.zinfo[0])-1, :] = sourceMatrix[0: len(ssfm_result.zinfo[0])-1, :]
+            matrix[starting_row : starting_row + len(ssfm_result.fiber.z_array)-1, :] = sourceMatrix[0: len(ssfm_result.fiber.z_array)-1, :]
 
         elif i==number_of_fibers-1:
 
-            matrix[starting_row : starting_row + len(ssfm_result.zinfo[0]), :] = sourceMatrix[0:len(ssfm_result.zinfo[0]), :]
+            matrix[starting_row : starting_row + len(ssfm_result.fiber.z_array), :] = sourceMatrix[0:len(ssfm_result.fiber.z_array), :]
             
-        starting_row +=len(ssfm_result.zinfo[0])-1
+        starting_row +=len(ssfm_result.fiber.z_array)-1
     
     
     return matrix        
@@ -2629,11 +2632,14 @@ if __name__ == "__main__":
     
     #  Initialize fibers
     alpha_test = 0.0
-    fiber_test = fiber_class(1000, gamma_test,   beta_list,    alpha_test  )
+    
+    numberOfSteps_test = 2**8 
+    
+    fiber_test = fiber_class(1000, numberOfSteps_test, gamma_test,   beta_list,    alpha_test  )
    
     
     
-    fiber_list = [fiber_test]
+    fiber_list = [fiber_test,fiber_test]
     fiber_span = fiber_span_class(fiber_list)
     
     
@@ -2667,9 +2673,8 @@ if __name__ == "__main__":
     
     
 
-    
-    testSafetyFactor = 10
-    testStepConfig=("fixed",2**8,testSafetyFactor)
+       
+
 
 
 
@@ -2678,7 +2683,6 @@ if __name__ == "__main__":
     #Run SSFM
     ssfm_result_list = SSFM(fiber_span,
                             testInputSignal,
-                            stepConfig=testStepConfig,
                             showProgressFlag=True,
                             experimentName=expName)
     
