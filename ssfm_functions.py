@@ -851,182 +851,6 @@ def load_InputSignal(path):
 
 
 
-def zstep_NL(z_m,fiber:fiber_class, input_signal:input_signal_class,stepmode,stepSafetyFactor):
-    """ 
-    Decide which approach to use for computing variable z-step size
-    
-    The magnitude of the z-steps can be chosen in different ways. A cautious
-    approach computes the step based on the peak power divided by the 
-    time resolution. The approx approach uses peak power divided by pulse
-    duration.
-    
-    Parameters:
-        z_m                 (float):              Current z-location in fiber
-        fiber               (fiber_class):        Class containing fiber properties
-        input_signal        (input_signal_class): Class containing signal properties
-        stepmode            (str):                String describing step method
-        stepSafetyFactor    (float):              Scales down calculated step by this factor
-        
-    Returns:
-        float: calculated z-step in m 
-    
-    """
-
-    
-    
-    
-    if stepmode.lower()=="cautious":
-        return np.abs(fiber.beta_list[0])*pi/(fiber.gamma*input_signal.Pmax*input_signal.duration)**2*np.exp(2*fiber.alpha_Np_per_m*z_m)/stepSafetyFactor
-    
-    if stepmode.lower()=="approx":
-        return np.abs(fiber.beta_list[0])*pi/(fiber.gamma*input_signal.Pmax)**2/(input_signal.duration*input_signal.timeFreq.time_step)*np.exp(2*fiber.alpha_Np_per_m*z_m)/stepSafetyFactor    
-
-
-    else:
-        return 1.0
-
-
-
-def getVariableZsteps( fiber:fiber_class, input_signal:input_signal_class,stepmode,stepSafetyFactor):    
-    """ 
-    Calculates z-steps and z-locations if a variable step size is desired.
-    
-    This function calls zstep_NL multiple times until the end of the array is reached.
-    Then, it returns an array of the z-locations and z-steps.
-    NOTE: The variable z-steps can take a long time to compute and is generally
-    not much more efficient or accurate than simply selecting a fixed stepsize.      
-    
-    Parameters:
-        fiber               (fiber_class):        Class containing fiber properties
-        input_signal        (input_signal_class): Class containing signal properties
-        stepmode            (str):                String describing step method
-        stepSafetyFactor    (float):              Scales down calculated step by this factor
-        
-    Returns:
-        list(nparray,nparray): List contains z_array, which are z-locations inside the fiber and dz_array, which contains step sizes 
-    """    
-    z_so_far=0.0
-    z_array=np.array([z_so_far])
-    dz_array=np.array([])
-    
-    
-    
-    dz_current_step_to_next_step = zstep_NL(0,fiber,input_signal,stepmode,stepSafetyFactor)
-    
-    
-    while (z_so_far+ dz_current_step_to_next_step <= fiber.Length):
-        z_so_far+=dz_current_step_to_next_step 
-        
-        z_array=np.append(z_array,z_so_far)
-        dz_array= np.append(dz_array,dz_current_step_to_next_step)
-        
-        dz_current_step_to_next_step = zstep_NL(z_so_far,fiber,input_signal,stepmode,stepSafetyFactor)
-        
-    z_array=np.append(z_array,fiber.Length)
-    dz_array= np.append(dz_array,fiber.Length-z_so_far)
-    
-    return (z_array, dz_array)
-
-# def getZsteps(fiber:fiber_class,input_signal:input_signal_class,stepConfig_list,fiber_index=""):
-#     """ 
-#     Decides whether to use fixed or variable step size and returns steps.
-    
-#     This function either calls getVariableZsteps to get variable z-steps or simply generates
-#     fixed z-steps based on the number of steps specified. Also plots and saves charts of 
-#     z-locations and z-step sizes for future reference.     
-    
-#     Parameters:
-#         fiber               (fiber_class):        Class containing fiber properties
-#         input_signal        (input_signal_class): Class containing signal properties
-#         stepConfig_list     (list):               Contains stepMode, stepApproach and stepSafetyFactor
-#         fiber_index=""      (str):                Index of fiber in span as a string.
-        
-#     Returns:
-#         list(nparray,nparray): List contains z_array, which are z-locations inside the fiber and dz_array, which contains step sizes 
-#     """    
-#     current_dir=os.getcwd()+'\\'
-    
-#     newFolderName = "Z-step-graphs\\"
-#     zStepFolder = current_dir + newFolderName
-    
-#     os.makedirs(zStepFolder,exist_ok=True)
-#     os.chdir(zStepFolder)
-    
-    
-#     stepMode=stepConfig_list[0]
-#     stepApproach=stepConfig_list[1]       
-#     stepSafetyFactor=stepConfig_list[2]
-    
-#     #Initialize zinfo to default 
-#     zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
-    
-#     number_of_beta_n_greater_than_zero = int(np.sum([beta_n!=0.0 for beta_n in fiber.beta_list]))
-    
-
-    
-#     if (fiber.gamma == 0.0):
-#         print("There is no nonlinearity, so do all dispersion and loss in one step")
-#         zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
-#     elif fiber.alpha_Np_per_m == 0.0 and number_of_beta_n_greater_than_zero == 0 and fiber.ramanModel == "None":
-#         print("There is no loss or dispersion, do all NL in one step.")
-#         zinfo = (np.array([0,fiber.Length]),np.array([fiber.Length]))
-
-#     else:
-        
-#         if stepMode.lower() == "fixed":
-            
-#             if type(stepApproach) == str:
-            
-#                 dz=zstep_NL(0,fiber, input_signal,stepApproach,stepSafetyFactor)
-#                 z_array=np.arange(0,fiber.Length,dz)
-                
-#                 if z_array[-1] != fiber.Length:
-#                     z_array=np.append(z_array,fiber.Length)
-                
-#                 dz_array = np.diff( z_array)
-                
-                
-#             else:
-#                 stepApproach=int(stepApproach)
-#                 z_array=np.linspace(0,fiber.Length,stepApproach+1)
-#                 dz_array=np.ones( stepApproach)*(z_array[1]-z_array[0])            
-    
-                
-#             zinfo   =(z_array,dz_array)
-            
-            
-            
-            
-#         else:
-#             zinfo = getVariableZsteps(fiber,input_signal,stepApproach,stepSafetyFactor)
-        
-#     fig,ax = plt.subplots(dpi=200)
-#     ax.set_title(f"Fiber number = {fiber_index}, \n Stepmode = ({stepConfig_list[0]},{stepConfig_list[1]}), stepSafetyFactor = {stepConfig_list[2]}")
-#     ax.plot(zinfo[0]/1e3,'b.',label = f"z-locs ({len(zinfo[0])})")
-
-#     ax.set_xlabel('Entry')
-#     ax.set_ylabel('z-location [km]')
-#     ax.tick_params(axis='y',labelcolor='b')
-    
-#     ax2=ax.twinx()
-#     ax2.plot(zinfo[1]/1e3,'r.',label = f"$\Delta$z-steps ({len(zinfo[1])})")
-#     ax2.set_ylabel('$\Delta$z [km]')
-#     ax2.tick_params(axis='y',labelcolor='r')
-    
-#     fig.legend(bbox_to_anchor=(1.3,0.8))
-    
-#     plt.savefig(f'Z-step_chart_{fiber_index}.png', 
-#                 bbox_inches ="tight",
-#                 pad_inches = 1,
-#                 orientation ='landscape')
-#     plt.show()
-    
-    
-#     os.chdir(current_dir)
-    
-#     return zinfo
-   
-
 
         
 #Class for holding result of SSFM simulation
@@ -1154,12 +978,12 @@ def getUnitsFromValue(value):
 
 def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,fiber_index,destination=None):    
     """ 
-    Computes, prints and plots characteristic distances (L_eff, L_D, L_NL)
+    Computes, prints and plots characteristic distances (L_eff, L_D, L_NL etc.)
     
     When solving the NLSE, different effects such as attenuation, dispersion,
     SPM, soliton oscillations etc. take place on different length scales.
     This function computes these length scales, prints them and plots a 
-    comparison, which is saved for reference.Note that the plot adaptively
+    comparison, which is saved for reference. Note that this function adaptively
     detects if beta2 is positive or negative. 
     
     Parameters:
@@ -1309,7 +1133,6 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,fi
     
         plt.show()
     
-    #End of describe_sim_parameters
 
    
 
@@ -1389,53 +1212,9 @@ def createOutputDirectory(experimentName):
     return (base_dir,current_dir) , current_time
 
 
-
-def saveStepConfig(stepConfig):
-    """ 
-    Saves stepConfig to .csv file
-    
-    Uses pandas to save stepConfig to .csv file so it can be loaded later
-    
-    Parameters:
-        stepConfig (list): Contains stepmode ('fixed'' or 'variable'), stepNumber or stepApproach ('cautious' or 'adaptive') and stepSafetyFactor (float)
-        
-    Returns:
-         
-    
-    """
-    #Initialize dataframe
-    stepConfig_df = pd.DataFrame(columns=['stepmode',
-                                      'stepNumber_or_stepApproach',
-                                      'SafetyFactor'])
-                                     
-    #Fill it with values
-    stepConfig_df.loc[  len(stepConfig_df.index) ] = [stepConfig[0],
-                                                      stepConfig[1],
-                                                      stepConfig[2]]
-    #Export dataframe to .csv file
-    stepConfig_df.to_csv("stepConfig.csv")        
+      
 
 
-def load_StepConfig(path):
-    """ 
-    Loads stepConfig from previous run
-    
-    Loads stepConfig from previous run when path to run folder is specified. 
-    
-    Parameters:
-        path (str): Path to folder
-        
-    Returns:
-        list: Contains stepMode ('fixed'' or 'variable'), stepNumber or stepApproach ('cautious' or 'adaptive') and stepSafetyFactor (float)
-    
-    """    
-    df = pd.read_csv(path+'\\stepConfig.csv')
-    
-    stepmode = df['stepmode'][0]
-    stepNumber_or_stepApproach = df['stepNumber_or_stepApproach'][0]
-    SafetyFactor = df['SafetyFactor'][0]
-    
-    return (stepmode,stepNumber_or_stepApproach,SafetyFactor)
     
     
 def load_previous_run(basePath):
@@ -1458,7 +1237,6 @@ def load_previous_run(basePath):
     
     fiber_span      = load_fiber_span(basePath+'\\input_info\\')
     input_signal    = load_InputSignal(basePath+'\\input_info\\')
-    stepConfig      = load_StepConfig( basePath+'\\input_info\\')
     
     print(f"Successfully loaded run in {basePath}")
     
@@ -1466,10 +1244,11 @@ def load_previous_run(basePath):
 
 
 def NL_simple(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
+    #TODO: Write function description
     return np.exp(1j*fiber.gamma*getPower(pulse)*dz)
 
 def NL_full(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
-    
+    #TODO: Implement Raman effect for both long and short-duration pulses
     fR = fiber.fR
     freq = timeFreq.f
     t = timeFreq.t
