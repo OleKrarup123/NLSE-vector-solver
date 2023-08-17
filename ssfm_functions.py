@@ -374,7 +374,7 @@ def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,
         return noise
 
 
-def getSpectrumFromPulse(time_s,pulse_amplitude):
+def getSpectrumFromPulse(time_s,pulse_amplitude,tol=1e-7):
     """ 
     Converts the amplitude of a signal in the time domain to spectral amplitude in freq. domain
     
@@ -397,9 +397,9 @@ def getSpectrumFromPulse(time_s,pulse_amplitude):
     
     err=np.abs((pulseEnergy/spectrumEnergy-1))
     
-    assert( err<1e-7 ), f'ERROR = {err}: Energy changed when going from Pulse to Spectrum!!!' 
     
-    return spectrum_amplitude
+    assert( err<tol), f'ERROR = {err:.E3} > {tol:.E3} = tol : Energy changed when going from Pulse to Spectrum!!!' 
+    
     return spectrum_amplitude
 
 
@@ -422,7 +422,7 @@ def getTimeFromFrequency(frequency_Hz):
     return fftshift(fftfreq(len(frequency_Hz), d=frequency_Hz[1]-frequency_Hz[0]))
 
 
-def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude):
+def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude,tol=1e-7):
     """ 
     Converts the spectral amplitude of a signal in the freq. domain temporal amplitude in time domain
     
@@ -446,7 +446,7 @@ def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude):
     
     err=np.abs((pulseEnergy/spectrumEnergy-1))
 
-    assert( err<1e-7   ), f'ERROR = {err}: Energy changed when going from Spectrum to Pulse!!!' 
+    assert( err<tol   ), f'ERROR = {err:.E3} > {tol:.E3} = tol : Energy changed too much when going from Spectrum to Pulse!!!' 
     
     return pulse
 
@@ -689,7 +689,7 @@ class input_signal_class:
         spectrum (nparray): Numpy array containing spectral amplitude obtained from FFT of self.amplitude in [sqrt(W)/Hz]
     """
     
-    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,time_offset_s,freq_offset_Hz,chirp,pulseType,order,noiseAmplitude):
+    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,time_offset_s,freq_offset_Hz,chirp,pulseType,order,noiseAmplitude,showOutput=True):
         """
         Constructor for input_signal_class
         
@@ -734,8 +734,8 @@ class input_signal_class:
             self.spectrum = getSpectrumFromPulse(self.timeFreq.t,self.amplitude)   
         
         
-        
-        self.describe_input_signal()
+        if showOutput==True:
+            self.describe_input_signal()
         
     def describe_input_signal(self,destination = None):
         """
