@@ -22,6 +22,18 @@ from datetime import datetime
 
 
 
+freq_min_Lband_Hz = 186.05*1e12
+freq_max_Lband_Hz = 190.875*1e12
+freq_width_Lband_Hz = freq_max_Lband_Hz-freq_min_Lband_Hz
+
+
+freq_min_Cband_Hz = 191.275*1e12
+freq_max_Cband_Hz = 196.15*1e12
+freq_width_Cband_Hz = freq_max_Cband_Hz-freq_min_Cband_Hz
+
+
+
+
 
 
 
@@ -87,6 +99,31 @@ def getChirp(time_s,pulse):
     return -1.0/(2*pi)*dphi/dt #Chirp = - 1/(2pi) * d(phi)/dt
     
 
+class channel_class:
+    """
+    Class for storing info about a certain frequency channel. 
+    
+    Attributes:
+        centerFreq_Hz (float): Central frequency of channel
+        minFreq_Hz (float): Lower frequency of channel
+        maxFreq_Hz (float): Upper frequency of channel
+        channelWidth_Hz (float): Width of channel
+        
+    """
+    
+    def __init__(self,centerFreq_Hz,minFreq_Hz,maxFreq_Hz):
+        
+        #Quick sanity check that center frequency is between min and max
+        assert minFreq_Hz    < maxFreq_Hz,    f"Error: minFreq_Hz    must be smaller than maxFreq_Hz,    but minFreq_Hz    = {minFreq_Hz}   >= {maxFreq_Hz}    = maxFreq_Hz "
+        assert centerFreq_Hz < maxFreq_Hz,    f"Error: centerFreq_Hz must be smaller than maxFreq_Hz,    but centerFreq_Hz = {centerFreq_Hz}>= {maxFreq_Hz}    = maxFreq_Hz "
+        assert minFreq_Hz    < centerFreq_Hz, f"Error: minFreq_Hz    must be smaller than centerFreq_Hz, but minFreq_Hz    = {minFreq_Hz}   >= {centerFreq_Hz} = centerFreq_Hz "
+
+        
+        self.centerFreq_Hz = centerFreq_Hz
+        self.minFreq_Hz = minFreq_Hz
+        self.maxFreq_Hz = maxFreq_Hz
+        self.channelWidth_Hz = self.maxFreq_Hz - self.minFreq_Hz
+        
 
 class timeFreq_class:
     """
@@ -221,7 +258,8 @@ def getPower(amplitude_in_time_or_freq_domain):
 
 
 
-def getEnergy(time_or_freq,amplitude_in_time_or_freq_domain):
+def getEnergy(time_or_freq,
+              amplitude_in_time_or_freq_domain):
     """ 
     Computes energy of signal or spectrum
 
@@ -243,9 +281,15 @@ def getEnergy(time_or_freq,amplitude_in_time_or_freq_domain):
 
 
 
+#TODO: Decide if "duration" should be FWHM or HWHM for different pulse types!
 
-
-def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,order):
+def GaussianPulse(time_s,
+                  peakAmplitude,
+                  duration_s,
+                  time_offset_s,
+                  freq_offset_Hz,
+                  chirp,
+                  order):
     """ 
     Creates Gaussian pulse
 
@@ -266,10 +310,17 @@ def GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,c
     """
     
     
-    assert 1 <= order, f"Error: Order of gaussian pulse is {order}. Must be >=1"
-    return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))*np.exp(-1j*2*pi*freq_offset_Hz*time_s)
+    assert order >= 1, f"Error: Order of gaussian pulse is {order}. Must be >=1"
+    carrier_freq = np.exp(-1j*2*pi*freq_offset_Hz*time_s)
 
-def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp): 
+    return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))*carrier_freq
+
+def squarePulse(time_s,
+                peakAmplitude,
+                duration_s,
+                time_offset_s,
+                freq_offset_Hz,
+                chirp): 
     """ 
     Creates square pulse
     
@@ -288,10 +339,43 @@ def squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chi
     
     """
     
-    return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,chirp,100)*np.exp(-1j*2*pi*freq_offset_Hz*time_s)
+    return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,100)
 
+def sincPulse(time_s,
+                peakAmplitude,
+                duration_s,
+                time_offset_s,
+                freq_offset_Hz,
+                chirp):
+    
+    """ 
+    Creates a sinc pulse (sin(pi*x)/(pi*x))
+    
+    Generates a sinc pulse, which is useful as its spectral shape will be square. 
+    
+    Parameters:
+        time_s          (nparray): Time range in seconds
+        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
+        duration_s      (float)  : Time at which the first zero of the sinc function is reached 
+        time_offset_s   (float)  : Central time of square pulse
+        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
+        chirp           (float)  : Dimensionless parameter controlling the chirp
+        
+    Returns:
+        nparray: Square pulse in time domain in units of sqrt(W)
+    """ 
+    carrier_freq = np.exp(-1j*2*pi*freq_offset_Hz*time_s)
+    chirp_factor = np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)
+    
+    return peakAmplitude*np.sinc(  (time_s-time_offset_s)/(duration_s) )*chirp_factor*carrier_freq
+       
 
-def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp):  
+def sechPulse(time_s,
+              peakAmplitude,
+              duration_s,
+              time_offset_s,
+              freq_offset_Hz,
+              chirp):  
     """ 
     Creates hyperbolic secant pulse
     
@@ -313,7 +397,9 @@ def sechPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp
         nparray: Sech pulse in time domain in units of sqrt(W)
     
     """
-    return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)*np.exp(-1j*2*pi*freq_offset_Hz*time_s)
+    carrier_freq = np.exp(-1j*2*pi*freq_offset_Hz*time_s)
+    chirp_factor = np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)
+    return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*chirp_factor*carrier_freq
 
 
 def noise_ASE(time_s,noiseAmplitude):
@@ -337,7 +423,15 @@ def noise_ASE(time_s,noiseAmplitude):
     return randomAmplitudes*np.exp(1j*randomPhases)   
 
 
-def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,pulseType,order,noiseAmplitude):
+def getPulse(time_s,
+             peakAmplitude,
+             duration_s,
+             time_offset_s,
+             freq_offset_Hz,
+             chirp,
+             pulseType,
+             order,
+             noiseAmplitude):
     """ 
     Creates pulse with the specified properties
 
@@ -370,6 +464,10 @@ def getPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,
     if pulseType.lower()=="square":
         return squarePulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp)+noise
     
+    if pulseType.lower()=="sinc":
+        return sincPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp)+noise
+    
+    
     if pulseType.lower()=="custom":
         return noise
 
@@ -398,7 +496,7 @@ def getSpectrumFromPulse(time_s,pulse_amplitude,tol=1e-7):
     err=np.abs((pulseEnergy/spectrumEnergy-1))
     
     
-    assert( err<tol), f'ERROR = {err:.E3} > {tol:.E3} = tol : Energy changed when going from Pulse to Spectrum!!!' 
+    assert( err<tol), f'ERROR = {err:.3e} > {tol:.3e} = tol : Energy changed when going from Pulse to Spectrum!!!' 
     
     return spectrum_amplitude
 
@@ -446,7 +544,7 @@ def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude,tol=1e-7):
     
     err=np.abs((pulseEnergy/spectrumEnergy-1))
 
-    assert( err<tol   ), f'ERROR = {err:.E3} > {tol:.E3} = tol : Energy changed too much when going from Spectrum to Pulse!!!' 
+    assert( err<tol   ), f'ERROR = {err:.3e} > {tol:.3e} = tol : Energy changed too much when going from Spectrum to Pulse!!!' 
     
     return pulse
 
@@ -466,7 +564,14 @@ class fiber_class:
         total_loss_dB (float):  Length*alpha_dB_per_m
     """
     
-    def __init__(self,L,numberOfSteps,gamma,beta_list,alpha_dB_per_m,ramanModel="None"):
+    def __init__(self,
+                 L,
+                 numberOfSteps,
+                 gamma,
+                 beta_list,
+                 alpha_dB_per_m,
+                 ramanModel="None",
+                 outputAmplification_dB=0.0):
         """
         Constructor for the fiber_class
         
@@ -488,19 +593,19 @@ class fiber_class:
         
         
         
-        self.Length=L
+        self.Length=float(L)
         self.numberOfSteps = int(numberOfSteps)
         self.z_array=np.linspace(0,self.Length,self.numberOfSteps+1)
         self.dz=self.z_array[1]-self.z_array[0]
         
-        self.gamma=gamma
+        self.gamma=float(gamma)
         
         #Pad list of betas so we always have terms up to 8th order 
         while len(beta_list)<=6:
             beta_list.append(0.0)
             
         self.beta_list=beta_list
-        self.alpha_dB_per_m=alpha_dB_per_m
+        self.alpha_dB_per_m=float(alpha_dB_per_m)
         self.alpha_Np_per_m = self.alpha_dB_per_m*np.log(10)/10.0 #Loss coeff is usually specified in dB/km, but Nepers/km is more useful for calculations
         self.total_loss_dB =  alpha_dB_per_m*self.Length
         #TODO: Make alpha frequency dependent.  
@@ -521,7 +626,7 @@ class fiber_class:
             #Frequency domain representation of Raman response taken from https://github.com/omelchert/GNLStools/blob/main/src/GNLStools.py
             self.RamanInFreqDomain_func = lambda freq: (self.tau1**2+self.tau2**2)/(self.tau1**2*(1-1j*freq*2*pi*self.tau2)**2+self.tau2**2) #Freq domain representation of Raman response
             
-        
+        self.outputAmplification_dB=outputAmplification_dB
         
         
         self.describe_fiber()
@@ -550,7 +655,7 @@ class fiber_class:
         print(f'Fiber alpha_Np_per_m \t= {self.alpha_Np_per_m} ', file = destination)
         print(f'Fiber total loss [dB] \t= {self.total_loss_dB} ', file = destination)
         print(f'Raman Model \t= {self.ramanModel}. (fR,tau1,tau2)=({self.fR:.3},{self.tau1/1e-15:.3},{self.tau2/1e-15:.3}) ', file = destination)
-        
+        print(f'Output Amplification = {self.outputAmplification_dB} ', file = destination)
 
         print(' ', file = destination)
 
@@ -689,7 +794,16 @@ class input_signal_class:
         spectrum (nparray): Numpy array containing spectral amplitude obtained from FFT of self.amplitude in [sqrt(W)/Hz]
     """
     
-    def __init__(self,timeFreq:timeFreq_class,peak_amplitude,duration,time_offset_s,freq_offset_Hz,chirp,pulseType,order,noiseAmplitude,showOutput=True):
+    def __init__(self,
+                 timeFreq:timeFreq_class,
+                 peak_amplitude,duration,
+                 time_offset_s,
+                 freq_offset_Hz,
+                 chirp,
+                 pulseType,
+                 order,
+                 noiseAmplitude,
+                 showOutput=True):
         """
         Constructor for input_signal_class
         
@@ -737,6 +851,9 @@ class input_signal_class:
         if showOutput==True:
             self.describe_input_signal()
         
+    def update_spectrum(self):
+        self.spectrum = getSpectrumFromPulse(self.timeFreq.t,self.amplitude)
+    
     def describe_input_signal(self,destination = None):
         """
         Prints a description of the input signal to destination
@@ -867,7 +984,11 @@ class ssfm_result_class:
         pulseMatrix ( nparray ): Amplitude of pulse at every z-location in fiber
         spectrumMatrix ( nparray ): Spectrum of pulse at every z-location in fiber       
     """
-    def __init__(self, input_signal:input_signal_class, fiber:fiber_class,experimentName,directories):
+    def __init__(self, 
+                 input_signal:input_signal_class, 
+                 fiber:fiber_class,
+                 experimentName,
+                 directories):
 
         """
         Constructor for ssfm_result_class. 
@@ -976,7 +1097,10 @@ def getUnitsFromValue(value):
 
     
 
-def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,fiber_index,destination=None):    
+def describe_sim_parameters(fiber:fiber_class,
+                            input_signal:input_signal_class,
+                            fiber_index,
+                            destination=None):    
     """ 
     Computes, prints and plots characteristic distances (L_eff, L_D, L_NL etc.)
     
@@ -1055,18 +1179,14 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,fi
     if fiber.gamma !=0.0:
         Length_NL = 1/fiber.gamma/input_signal.Pmax   
         N_soliton=np.sqrt(Length_disp_array[0]/Length_NL)
-    else:
-        Length_NL=1e100
-        N_soliton=np.NaN
+        length_list=np.append(length_list,Length_NL)
     
-    length_list=np.append(length_list,Length_NL)
+        if destination != None:
+            ax.barh("Nonlinear Length",Length_NL/scalingfactor, color ='C3')
     
-    if destination != None:
-        ax.barh("Nonlinear Length",Length_NL/scalingfactor, color ='C3')
-    
-    print(f"  Length_NL \t= {Length_NL/scalingfactor:.2e} {prefix}m", file = destination)
-    print(f"  N_soliton \t= {N_soliton:.2e}", file = destination)
-    print(f"  N_soliton^2 \t= {N_soliton**2:.2e}", file = destination)
+        print(f"  Length_NL \t= {Length_NL/scalingfactor:.2e} {prefix}m", file = destination)
+        print(f"  N_soliton \t= {N_soliton:.2e}", file = destination)
+        print(f"  N_soliton^2 \t= {N_soliton**2:.2e}", file = destination)
 
 
     if fiber.beta_list[0]<0:
@@ -1096,7 +1216,7 @@ def describe_sim_parameters(fiber:fiber_class,input_signal:input_signal_class,fi
         if destination != None:
             ax.barh("MI gain Length",1/(gain_MI*scalingfactor), color ='C5')
         
-    elif fiber.beta_list[0]>0:           
+    elif fiber.beta_list[0]>0 and fiber.gamma>0:           
         #https://prefetch.eu/know/concept/optical-wave-breaking/
         Nmin_OWB = np.exp(3/4)/2 #Minimum N-value of Optical Wave breaking with Gaussian pulse
         
@@ -1382,6 +1502,9 @@ def SSFM(fiber_span:fiber_span_class,
         #End loop
         #Apply half dispersion step
         
+         
+        
+        
         
         print(f"Running SSFM with {fiber.numberOfSteps} steps")
         updates = 0
@@ -1393,9 +1516,13 @@ def SSFM(fiber_span:fiber_span_class,
             #Go to spectral domain and apply disp and loss
             spectrum = getSpectrumFromPulse(t, pulse)*(disp_and_loss) 
             
+            if z_step_index == fiber.numberOfSteps-1:
+                outputAmp_factor = 10**(fiber.outputAmplification_dB/2/10)
+            else:
+                outputAmp_factor=1.0
             
             #Apply half dispersion step to spectrum and store results 
-            ssfm_result.spectrumMatrix[z_step_index+1,:]=spectrum*disp_and_loss_half_step
+            ssfm_result.spectrumMatrix[z_step_index+1,:]=spectrum*disp_and_loss_half_step*outputAmp_factor
             ssfm_result.pulseMatrix[z_step_index+1,:]=getPulseFromSpectrum(f, ssfm_result.spectrumMatrix[z_step_index+1,:])
             
             #Return to time domain 
@@ -1521,7 +1648,7 @@ def unpackMatrix(ssfm_result_list,zvals,timeFreq,pulse_or_spectrum):
     """  
     number_of_fibers = len(ssfm_result_list)
     
-    print(f"number_of_fibers = {number_of_fibers}")
+    #print(f"number_of_fibers = {number_of_fibers}")
     
     matrix=np.zeros( ( len(zvals), len(  timeFreq.t )  ) )*(1+0j)
     
@@ -1607,8 +1734,15 @@ def plotFirstAndLastPulse(ssfm_result_list, nrange:int, dB_cutoff,**kwargs):
     for kw, value in kwargs.items():
         if kw.lower()=='firstandlastpulsescale' and value.lower()=='log':
             ax.set_yscale('log')
-
-    ax.legend(bbox_to_anchor=(1.15,0.8))
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(
+               loc='upper center', 
+               bbox_to_anchor=(0.5, 1.25),
+               ncol=2, 
+               fancybox=True, 
+               shadow=True)
     saveplot('first_and_last_pulse')
     plt.show() 
     os.chdir(ssfm_result_list[0].dirs[0])
@@ -1785,7 +1919,7 @@ def plotEverythingAboutPulses(ssfm_result_list,
         ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
         nrange (int): Determines how many points on either side of the center we wish to plot  
         dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
-        **kwargs (optional):     
+        **kwargs (optional): Use keywords and values to skip auxillary plots that take a long time to generate.    
     
     Returns:
 
@@ -1794,8 +1928,13 @@ def plotEverythingAboutPulses(ssfm_result_list,
     print('  ')
     plotFirstAndLastPulse(ssfm_result_list, nrange, dB_cutoff,**kwargs)
     plotPulseMatrix2D(ssfm_result_list,nrange,dB_cutoff)
-    plotPulseChirp2D(ssfm_result_list,nrange,dB_cutoff,**kwargs) 
-    plotPulseMatrix3D(ssfm_result_list,nrange,dB_cutoff)
+    
+    for kw, value in kwargs.items():
+        if kw.lower()=='skip_chirp_plot_flag' and value==False:
+            plotPulseChirp2D(ssfm_result_list,nrange,dB_cutoff,**kwargs) 
+            
+        if kw.lower()=='skip_3D_plot_flag' and value == False:
+            plotPulseMatrix3D(ssfm_result_list,nrange,dB_cutoff)
     print('  ')
 
 
@@ -1835,7 +1974,7 @@ def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
     Pmax_final = np.max(P_final)
     Pmax=np.max([Pmax_initial,Pmax_final]) 
 
-    f=(timeFreq.f[Nmin:Nmax])/1e12#+center_freq_Hz
+    f=(timeFreq.f[Nmin:Nmax])/1e12+center_freq_Hz/1e12
     
     scalingFactor,prefix=getUnitsFromValue(np.max(zvals))
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -1843,11 +1982,19 @@ def plotFirstAndLastSpectrum(ssfm_result_list, nrange:int, dB_cutoff):
     ax.set_title("Initial spectrum and final spectrum")
     ax.plot(f,P_initial,label=f"Initial Spectrum at {zvals[0]}{prefix}m")
     ax.plot(f,P_final,label=f"Final Spectrum at {zvals[-1]/scalingFactor}{prefix}m")
+    ax.axvline(x=center_freq_Hz/1e12,color='gray',alpha=0.4)
     ax.set_xlabel("Freq. [THz]")
-    ax.set_ylabel("PSD [W/GHz]")
+    ax.set_ylabel("PSD [J/Hz]")
     ax.set_yscale('log')
     ax.set_ylim(Pmax/(10**(-dB_cutoff/10)),2*Pmax)
-    fig.legend(bbox_to_anchor=(0.95,0.8))
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(
+               loc='upper center', 
+               bbox_to_anchor=(0.5, 1.25),
+               ncol=2, 
+               fancybox=True, 
+               shadow=True)
     saveplot('first_and_last_spectrum')
     plt.show()
     os.chdir(ssfm_result_list[0].dirs[0])
@@ -1944,7 +2091,7 @@ def plotSpectrumMatrix3D(ssfm_result_list, nrange:int, dB_cutoff):
 
 def plotEverythingAboutSpectra(ssfm_result_list,
                                nrange:int, 
-                               dB_cutoff):
+                               dB_cutoff,**kwargs):
     """ 
     Generates all plots of pulse amplitudes throughout fiber span
     
@@ -1955,16 +2102,23 @@ def plotEverythingAboutSpectra(ssfm_result_list,
         ssfm_result_list (list): List of ssmf_result_class objects corresponding to each fiber segment
         nrange (int): Determines how many points on either side of the center we wish to plot  
         dB_cutoff : Lowest y-value in plot is this many dB smaller than the peak power
-    
+        **kwargs  : If 'skip_3D_plot_flag'=True is selected, do not make a 3D plot of the spectrum.
     Returns:
 
     
     """   
 
+
+
+
     print('  ')  
     plotFirstAndLastSpectrum(ssfm_result_list, nrange, dB_cutoff)
     plotSpectrumMatrix2D(ssfm_result_list, nrange, dB_cutoff)
-    plotSpectrumMatrix3D(ssfm_result_list, nrange, dB_cutoff)
+    
+    for kw, value in kwargs.items():
+        if kw.lower()=='skip_3D_plot_flag' and value == False:
+            plotSpectrumMatrix3D(ssfm_result_list, nrange, dB_cutoff)
+            
     print('  ')  
 
     
@@ -2134,6 +2288,11 @@ def getStDevTimeOrFreq(time_or_freq,pulse_or_spectrum):
     return np.sqrt(getVarianceTimeOrFreq(time_or_freq,pulse_or_spectrum))
 
 
+
+    
+    
+    
+
 def plotAverageAndStdTimeAndFreq(ssfm_result_list):
     """ 
     Plots how spectral and temporal width of signal change with distance
@@ -2197,7 +2356,17 @@ def plotAverageAndStdTimeAndFreq(ssfm_result_list):
     
     ax2.set_ylabel(f'Freq. [{prefix_spectrum}Hz]',color = 'C1')
     ax2.tick_params(axis='y',labelcolor='C1')
-    fig.legend(bbox_to_anchor=(1.55,0.8))
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['left'].set_visible(False)
+    
+    fig.legend(
+               loc='upper center', 
+               bbox_to_anchor=(0.5, 1.15),
+               ncol=2, 
+               fancybox=True, 
+               shadow=True)
     
     saveplot('Width_evo') 
     plt.show()
@@ -2208,9 +2377,7 @@ def plotEverythingAboutResult(ssfm_result_list,
                               nrange_pulse, 
                               dB_cutoff_pulse, 
                               nrange_spectrum, 
-                              dB_cutoff_spectrum,
-                              skip_3D_plot_flag = False,
-                              skip_chirp_plot_flag = False,
+                              dB_cutoff_spectrum,          
                               **kwargs):
     """ 
     Generates all plots of pulse amplitudes, spectra etc. throughout fiber span
@@ -2237,15 +2404,15 @@ def plotEverythingAboutResult(ssfm_result_list,
     
     plotEverythingAboutSpectra(ssfm_result_list,
                                    nrange_spectrum, 
-                                   dB_cutoff_spectrum)
+                                   dB_cutoff_spectrum,**kwargs)
 
 
 
 
 
 
+#TODO: implement wavelet diagram
 from scipy import signal
-
 def waveletTest(M,s):
     
     w=1
@@ -2386,21 +2553,147 @@ def getGammaFromFiberParams(wavelength_m,n2_m2_W,coreDiameter_m):
     return 2*pi/wavelength_m*n2_m2_W/( pi* coreDiameter_m**2/4  )
   
 
+def extractSpectrumRange(freqList, spectralAmplitude,freq1,freq2):
+    
+    assert freq1 < freq2, f"Error: freq1 must be smaller than freq2, but freq1 = {freq1}>= {freq2} = freq2 "
+    
+    array1 = np.abs(freqList-freq1)
+    index1 = array1.argmin()
+    
+    array2 = np.abs(freqList-freq2)
+    index2 = array2.argmin()
+    
+    outputArray = np.zeros_like(spectralAmplitude)*1j
+    
+    outputArray[index1:index2]=spectralAmplitude[index1:index2]
+    
+    return outputArray
+    
+
+
+def getValueAtFreq(freqList,freqOfInterest,array):
+    
+    absArray = np.abs(freqList-freqOfInterest)
+    index = absArray.argmin()
+    
+    return array[index]
+    
+
+
+def getChannelSNR_dB(ssfm_result_list,
+                     channel:channel_class,
+                     signalBW):
+    zvals = unpackZvals(ssfm_result_list)
+    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    spectrumMatrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"spectrum")
+    
+    freqs=timeFreq.f+timeFreq.centerFrequency
+    
+    gap_Hz = (channel.channelWidth_Hz-signalBW)/2 #Absolute distance from lower(upper) channel edge to signal lower(upper) edge.
+    
+    assert gap_Hz>0, f"ERROR! The gap from the channel edge to the signal must be positive, but is {gap_Hz}!"
+    
+    outputArray = np.zeros_like(zvals)*1.0
+    
+    for i,spectrum in enumerate(spectrumMatrix):
+        
+        signal = extractSpectrumRange(freqs, spectrum,channel.minFreq_Hz+gap_Hz ,channel.maxFreq_Hz-gap_Hz)
+        signalEnergy = getEnergy(freqs, signal)
+        
+        noiseBelow = extractSpectrumRange(freqs, spectrum,channel.minFreq_Hz,channel.minFreq_Hz+gap_Hz)
+        noiseAbove = extractSpectrumRange(freqs, spectrum,channel.maxFreq_Hz-gap_Hz,channel.maxFreq_Hz)
+        
+        noiseEnergyBelow=getEnergy(freqs, noiseBelow)
+        noiseEnergyAbove=getEnergy(freqs, noiseAbove)
+        
+        
+        leftEdgeNoisePSD = np.abs(getValueAtFreq(freqs,channel.minFreq_Hz+gap_Hz*0.95,noiseBelow))**2
+        rightEdgeNoisePSD = np.abs(getValueAtFreq(freqs,channel.maxFreq_Hz-gap_Hz*1.05,noiseAbove))**2
+        
+        slope = (rightEdgeNoisePSD-leftEdgeNoisePSD)/signalBW 
+        offset = leftEdgeNoisePSD
+        
+        noiseEnergyInside = 0.5*slope*signalBW**2+offset*signalBW 
+        
+        totalNoiseEnergy = noiseEnergyBelow+noiseEnergyInside+noiseEnergyAbove
+        
+        SNR_i_dB = 10*np.log10(signalEnergy/totalNoiseEnergy)
+        
+        outputArray[i]=SNR_i_dB
+        
+    return zvals,outputArray
+        
+        
+        
+def plotSNR_NLforChannels(ssfm_result_list,
+                     channel_list,
+                     channelNumber_list,
+                     signalBW,
+                     **kwargs):
+    
+    os.chdir(ssfm_result_list[0].dirs[1])
+    fig, ax = plt.subplots(dpi=200)
+    ax.set_title("Evolution of Nonlinear SNR")
+    
+    distance_so_far = 0.0
+    for result in ssfm_result_list:
+        distance_so_far+= result.fiber.Length
+        ax.axvline(x=distance_so_far/1e3,color='black',linestyle='--',alpha=1.0)
+    
+    for idx,channelNumber in enumerate(channelNumber_list): 
+        
+        channel=channel_list[channelNumber]
+    
+        z,SNR_NL = getChannelSNR_dB(ssfm_result_list,
+                             channel,
+                             signalBW) 
+        
+        
+
+        ax.plot(z/1e3,SNR_NL,'.',color=f'C{idx}',label=f'Ch# {channelNumber} ')
+        
+        ax.axhline(y=SNR_NL[-1],color=f'C{idx}',alpha=0.4,label=f'Final SNR = {SNR_NL[-1]:.2f}')
+        
+    ax.set_xlabel("Distance [km]")
+    ax.set_ylabel("$SNR_{NL}$ [dB]")
+    
+    for kw, value in kwargs.items():
+        if kw.lower()=='ylims':
+            ax.set_ylim(value[0],value[1])
+    
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.grid()
+    
+    ax.legend(
+               loc='upper center', 
+               bbox_to_anchor=(0.5, 1.3),
+               ncol=len(channelNumber_list), 
+               fancybox=True, 
+               shadow=True)
+    
+    saveplot('SNR_NL_plot')
+    plt.show() 
+    os.chdir(ssfm_result_list[0].dirs[0])
+    
+        
+
+
 if __name__ == "__main__":
     
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     
     
-    N  = 2**16 #Number of points
-    dt = 1e-15 #Time resolution [s] 
+    N  = 2**18 #Number of points
+    dt = 0.05e-12 #Time resolution [s] 
     
-    centerWavelength = 426.9e-9 #laser wl in m  
+    centerWavelength = 1550e-9 #laser wl in m  
     centerFreq_test=wavelengthToFreq(centerWavelength)
     
     timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
-    beta_list = [10e-30] #Dispersion in units of s^(entry+2)/m    
-    #beta_list = [0,0,1e-12*1e-24*1e-11] 
+    beta_list = [1.0e-28] #Dispersion in units of s^(entry+2)/m    
     
     fiber_diameter = 9e-6 #m
     n2_silica=2.2e-20 #m**2/W
@@ -2408,11 +2701,19 @@ if __name__ == "__main__":
     gamma_test = getGammaFromFiberParams(centerWavelength,n2_silica,fiber_diameter)
     
     #  Initialize fibers
-    alpha_test = 0.0
+    alpha_test = 0.22/1e3
     
-    numberOfSteps_test = 2**6 
+    length_test=40e3
+    spanloss=alpha_test*length_test
     
-    fiber_test = fiber_class(1000, numberOfSteps_test, gamma_test,   beta_list,    alpha_test  )
+    numberOfSteps_test = 2**7 
+    
+    fiber_test = fiber_class(length_test, 
+                             numberOfSteps_test, 
+                             gamma_test,   
+                             beta_list,    
+                             alpha_test, 
+                             outputAmplification_dB=spanloss  )
    
     
     
@@ -2422,13 +2723,13 @@ if __name__ == "__main__":
     
     
     
-    testAmplitude = np.sqrt(1)                    #Amplitude in units of sqrt(W)
-    testDuration  =1e-12   #Pulse 1/e^2 duration [s]
+    testAmplitude = np.sqrt(1/1e3)                    #Amplitude in units of sqrt(W)
+    testDuration  =10e-12   #Pulse 1/e^2 duration [s]
     testTimeOffset    = 0                       #Time offset
-    testFreqOffset    = 0                       #Time offset
+    testFreqOffset    = 0             #Freq offset from center frequency
     
     testChirp = 0
-    testPulseType='gaussian' 
+    testPulseType='custom' 
     testOrder = 1
     testNoiseAmplitude = 0
     
@@ -2443,9 +2744,47 @@ if __name__ == "__main__":
                                           testOrder,
                                           testNoiseAmplitude)
     
-    #testInputSignal.amplitude = np.cos(2*pi*5e9*testInputSignal.timeFreq.t)*testInputSignal.amplitude
-    #testInputSignal.spectrum  = getSpectrumFromPulse(testInputSignal.timeFreq.t, testInputSignal.amplitude) 
-      
+    channel_spacing_Hz = 120e9
+    Nchannels = 40
+    channel_list = [None]*Nchannels
+    
+    
+    
+    for channel_index in range(Nchannels):
+        
+        channelFreqCenter_Hz = freq_min_Cband_Hz+channel_spacing_Hz*(0.5+channel_index)
+        channelFreqMin_Hz    = channelFreqCenter_Hz-channel_spacing_Hz/2
+        channelFreqMax_Hz    = channelFreqCenter_Hz+channel_spacing_Hz/2
+        
+        currentChannel = channel_class(channelFreqCenter_Hz, channelFreqMin_Hz, channelFreqMax_Hz)
+        channel_list[channel_index]=currentChannel
+        
+        
+        testInputSignal.amplitude += getPulse(timeFreq_test.t, 
+                                              testAmplitude, 
+                                              testDuration, 
+                                              testTimeOffset,
+                                              timeFreq_test.centerFrequency-currentChannel.centerFreq_Hz,                                        
+                                              testChirp,
+                                              'sinc',
+                                              testOrder,
+                                              testNoiseAmplitude)
+    testInputSignal.update_spectrum()
+    
+    testChannel =38
+    
+    fig,ax=plt.subplots()
+    ax.plot(testInputSignal.timeFreq.f/1e12+testInputSignal.timeFreq.centerFrequency/1e12,getPower(testInputSignal.spectrum))
+    ax.plot(testInputSignal.timeFreq.f/1e12+testInputSignal.timeFreq.centerFrequency/1e12,getPower(extractSpectrumRange(testInputSignal.timeFreq.f/1e12+testInputSignal.timeFreq.centerFrequency/1e12, testInputSignal.spectrum,channel_list[testChannel].minFreq_Hz/1e12,channel_list[testChannel].maxFreq_Hz/1e12)))
+    ax.axvline(x=freq_min_Cband_Hz/1e12,color='C3')
+    ax.axvline(x=freq_max_Cband_Hz/1e12,color='C3')
+    
+
+
+    
+    #plt.axis([channel_list[21].minFreq_Hz/1e12-0.3,channel_list[21].maxFreq_Hz/1e12+0.3,1e-27,1e-23])
+    ax.set_yscale('log')
+    plt.show()
     
     
     
@@ -2456,21 +2795,20 @@ if __name__ == "__main__":
 
 
 
-    expName="Raman_development"
+    expName="TelecomSim_development"
     #Run SSFM
-    ssfm_result_list = SSFM(fiber_span,
-                            testInputSignal,
+    ssfm_result_list = SSFM(fiber_span, testInputSignal,
                             showProgressFlag=True,
                             experimentName=expName)
     
     
     
     #Plot pulses
-    nrange_test_pulse=1000
+    nrange_test_pulse=2000
     cutoff_test_pulse=-60
 
-    #Plot pulses
-    nrange_test_spectrum=int(1000)
+    #Plot spectrum
+    nrange_test_spectrum=int(2000)
     cutoff_test_spectrum=-60
     
     #plotFirstAndLastPulse(ssfm_result_list,nrange_test_pulse, cutoff_test_pulse)
@@ -2486,7 +2824,24 @@ if __name__ == "__main__":
                               cutoff_test_pulse,
                               nrange_test_spectrum,
                               cutoff_test_spectrum,
+                              skip_chirp_plot_flag = True
                               )
+    
+    plotFirstAndLastSpectrum(ssfm_result_list, int(len(testInputSignal.timeFreq.t)*0.3), cutoff_test_spectrum)
+    
+    plotSNR_NLforChannels(ssfm_result_list,
+                         channel_list,
+                         [1,20,39],
+                         1/testDuration,
+                         ylims=[9.3,15])
+    
+    
+
+    
+
+    
+    
+    
     
     #makeChirpGif(ssfm_result_list,nrange_test_pulse,chirpRange=[-20,20],framerate=30)
     
