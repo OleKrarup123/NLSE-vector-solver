@@ -8,7 +8,7 @@ Created on Fri Dec  9 10:23:48 2022
 import numpy as np
 from scipy.fftpack import fft, ifft, fftshift, ifftshift, fftfreq
 
-from scipy.constants import pi, c
+from scipy.constants import pi, c, h
 
 
 import pandas as pd
@@ -22,11 +22,12 @@ from datetime import datetime
 
 
 
+#Characteristic frequencies of L-band
 freq_min_Lband_Hz = 186.05*1e12
 freq_max_Lband_Hz = 190.875*1e12
 freq_width_Lband_Hz = freq_max_Lband_Hz-freq_min_Lband_Hz
 
-
+#Characteristic frequencies of C-band
 freq_min_Cband_Hz = 191.275*1e12
 freq_max_Cband_Hz = 196.15*1e12
 freq_width_Cband_Hz = freq_max_Cband_Hz-freq_min_Cband_Hz
@@ -481,6 +482,8 @@ def getSpectrumFromPulse(time_s,pulse_amplitude,FFT_tol=1e-7):
     Parameters:
         time_s          (nparray): Time range in seconds
         pulse_amplitude (nparray): Pulse amplitude in sqrt(W)
+        FFT_tol=1e-7 (float) (optional): Maximum fractional change in signal energy when doing FFT
+
         
     Returns:
         nparray: spectrum amplitude in sqrt(W)/Hz.  
@@ -529,7 +532,7 @@ def getPulseFromSpectrum(frequency_Hz,spectrum_amplitude,FFT_tol=1e-7):
     Parameters:
         frequency_Hz          (nparray): Frequency in Hz
         spectrum_amplitude    (nparray): Spectral amplitude in sqrt(W)/Hz
-        
+        FFT_tol=1e-7 (float) (optional): Maximum fractional change in signal energy when doing FFT
     Returns:
         nparray: Temporal amplitude in sqrt(W). 
     
@@ -571,7 +574,10 @@ class fiber_class:
                  beta_list,
                  alpha_dB_per_m,
                  ramanModel="None",
-                 outputAmplification_dB=0.0):
+                 outputAmplification_dB=0.0,
+                 noiseFactor_dB=-1e3,
+                 inputAttenuation_dB=0.0,
+                 outputAttenuation_dB=0.0):
         """
         Constructor for the fiber_class
         
@@ -585,7 +591,10 @@ class fiber_class:
             beta_list (list): List of dispersion coefficients [beta2,beta3,...] [s^(entry+2)/m]
             alpha_dB_per_m (float): Attenuation coeff in [dB/m]
             ramanModel (str) (default="None"): String to select Raman model. Default, "None", indicates that Raman should be ignored for this fiber.
-            
+            outputAmplification_dB = 0.0 (float) (optional): Lumped amplification at the end of the fiber span
+            noiseFactor_dB = 0.0 (float) (optional): Noise factor of the amplification at the end of the fiber span.
+            inputAttenuation_dB=0.0 (float) (optional): Attenuation at the input of the fiber due to splicing/misalignment
+            outputAttenuation_dB=0.0 (float) (optional): Attenuation at the output of the fiber due to splicing/misalignment
             
             
             
@@ -610,23 +619,28 @@ class fiber_class:
         self.total_loss_dB =  alpha_dB_per_m*self.Length
         #TODO: Make alpha frequency dependent.  
         
+        #TODO: Implement Raman model 
         #Default: No Raman effect
-        self.ramanModel=ramanModel
-        self.fR=0.0
-        self.tau1=0.0
-        self.tau2=0.0
+        self.ramanModel = ramanModel
+        self.fR         = 0.0
+        self.tau1       = 0.0
+        self.tau2       = 0.0
         
         self.RamanInFreqDomain_func = lambda freq: 0.0
         
+        
         if ramanModel == "Agrawal":  #Raman parameters taken from Govind P. Agrawal's book, "Nonlinear Fiber Optics". 
-            self.fR = 0.180  # Relative contribution of Raman effect to overall nonlinearity
-            self.tau1 = 12.2*1e-15 # Average angular oscillation time of molecular bonds in silica lattice. Note: 1/(2*pi*12.2fs) = 13.05THz = Typical Raman frequency
-            self.tau2 = 30.0*1e-15 # Average exponential decay time of molecular bond oscilaltions. Note: 2*1/(2*pi*30.0fs) = 10.61 THz = Typical Raman gain spectrum FWHM 
+            self.fR     = 0.180  # Relative contribution of Raman effect to overall nonlinearity
+            self.tau1   = 12.2*1e-15 # Average angular oscillation time of molecular bonds in silica lattice. Note: 1/(2*pi*12.2fs) = 13.05THz = Typical Raman frequency
+            self.tau2   = 30.0*1e-15 # Average exponential decay time of molecular bond oscilaltions. Note: 2*1/(2*pi*30.0fs) = 10.61 THz = Typical Raman gain spectrum FWHM 
             
             #Frequency domain representation of Raman response taken from https://github.com/omelchert/GNLStools/blob/main/src/GNLStools.py
             self.RamanInFreqDomain_func = lambda freq: (self.tau1**2+self.tau2**2)/(self.tau1**2*(1-1j*freq*2*pi*self.tau2)**2+self.tau2**2) #Freq domain representation of Raman response
             
-        self.outputAmplification_dB=outputAmplification_dB
+        self.outputAmplification_dB     = outputAmplification_dB
+        self.noiseFactor_dB             = noiseFactor_dB
+        self.inputAttenuation_dB        = inputAttenuation_dB
+        self.outputAttenuation_dB       = outputAttenuation_dB
         
         
         self.describe_fiber()
@@ -817,6 +831,9 @@ class input_signal_class:
             pulseType (str): Selects pulse type from a set of pre-defined ones. Select "custom" to define the signal manually
             order (int): For n==1 a and pulseType = "Gaussian" a regular Gaussian pulse is returned. For n>=1 return a super-Gaussian  
             noiseAmplitude (float): Amplitude of added white noise in units of [sqrt(W)]. 
+            showOutput=True (bool) (optional): Flag to determine if fiber characteristics should be printed 
+            FFT_tol=1e-7 (float) (optional): Maximum fractional change in signal energy when doing FFT
+
         """
 
 
@@ -829,6 +846,7 @@ class input_signal_class:
         self.noiseAmplitude=noiseAmplitude        
         self.timeFreq=timeFreq
   
+        self.FFT_tol=FFT_tol
         
         self.amplitude = getPulse(self.timeFreq.t,
                                   peak_amplitude,
@@ -839,12 +857,15 @@ class input_signal_class:
                                   pulseType,
                                   order,
                                   noiseAmplitude)
+        self.spectrum=1j*np.zeros_like(self.amplitude)
+        self.update_spectrum()
+        
         self.Pmax=0.0
         self.update_Pmax()
         self.Amax=0.0
         self.update_Amax()
 
-        self.FFT_tol=FFT_tol
+        
         
 
         if getEnergy(self.timeFreq.t, self.amplitude) == 0.0:
@@ -857,6 +878,15 @@ class input_signal_class:
             self.describe_input_signal()
         
     def update_spectrum(self):
+        """
+        Updates the spectrum. Useful if the time domain signal is altered, for
+        example when a custom signal is generated by adding multiple ones together
+
+        Returns
+        -------
+        None.
+
+        """
         self.spectrum = getSpectrumFromPulse(self.timeFreq.t,self.amplitude,FFT_tol=self.FFT_tol)
         self.update_Pmax()
         self.update_Amax()
@@ -865,9 +895,27 @@ class input_signal_class:
         
     
     def update_Pmax(self):
+        """
+        Updates the maximum power of signal. Useful if the amplitude is modified
+        when a custom signal is generated.
+
+        Returns
+        -------
+        None.
+
+        """
         self.Pmax = np.max(getPower(self.amplitude))
     
     def update_Amax(self):
+        """
+        Updates the maximum amplitude of signal. Useful if the amplitude is modified
+        when a custom signal is generated.
+
+        Returns
+        -------
+        None.
+
+        """
         self.Amax = np.sqrt(self.Pmax)
     
     def describe_input_signal(self,destination = None):
@@ -1298,7 +1346,7 @@ def describe_run( current_time, current_fiber:fiber_class,  current_input_signal
     
 
 
-
+#TODO: update this with EDFA and input/output loss
 def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_signal_class,fiber_index):
     """ 
     Prints info about fiber, characteristic lengths and stepMode
@@ -1323,7 +1371,25 @@ def describeInputConfig(current_time, fiber:fiber_class,  input_signal:input_sig
             describe_run( current_time, fiber,  input_signal, fiber_index=str(fiber_index)  ,destination = output_file)    
 
 
-def createOutputDirectory(experimentName):
+def createOutputDirectory(experimentName:str):
+    """
+    Creates output directory for output (graphs etc.)
+
+    Parameters
+    ----------
+    experimentName : str
+        String with the name of the current experiment.
+
+    Returns
+    -------
+    base_dir : str
+        Location of the script that is being run.
+    current_dir: str
+        Location where the output of the experiment will be saved.
+    current_time : datetime.datetime
+        Datetime object of time where the run was started.
+
+    """
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
     base_dir=os.getcwd()+'\\'
     os.chdir(base_dir)
@@ -1367,7 +1433,6 @@ def load_previous_run(basePath):
     Returns:
         fiber_span (fiber_span_class): Info about fiber span consisting of 1 or more fibers
         input_signal (input_signal_class): Info about input signal
-        stepConfig (list):  Info about step configuration
     
     """    
     print(f"Loading run in {basePath}")
@@ -1377,14 +1442,35 @@ def load_previous_run(basePath):
     
     print(f"Successfully loaded run in {basePath}")
     
-    return fiber_span, input_signal, stepConfig
+    return fiber_span, input_signal
 
 
-def NL_simple(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
-    #TODO: Write function description
-    return np.exp(1j*fiber.gamma*getPower(pulse)*dz)
+def NL_simple(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz_m):
+    """
+    Calculates nonlinear phase shift in time domain for the simple, scalar case
+    without Raman
 
-def NL_full(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
+    Parameters
+    ----------
+    fiber : fiber_class
+        Fiber that we are currently propagating through.
+    timeFreq : timeFreq_class
+        Unused in this function but keep it so this function has the same
+        arguments as NL_full.
+    pulse : np.array([complex])
+        Pulse whose power determines the nonlinear phase shift.
+    dz : float
+        Step size in m in the z-direction.
+
+    Returns
+    -------
+    np.array([complex])
+        Array of complex exponentials to be applied to signal.
+
+    """
+    return np.exp(1j*fiber.gamma*getPower(pulse)*dz_m)
+
+def NL_full(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz_m):
     #TODO: Implement Raman effect for both long and short-duration pulses
     fR = fiber.fR
     freq = timeFreq.f
@@ -1396,13 +1482,46 @@ def NL_full(fiber:fiber_class, timeFreq:timeFreq_class, pulse,dz):
     
     NR_func = lambda current_pulse: (1-fR)*getPower(current_pulse)*current_pulse + fR*current_pulse*getPulseFromSpectrum(freq,getSpectrumFromPulse(t,getPower(current_pulse))*RamanInFreqDomain)
     
-    NR_in_freq_domain = 1j*dz*fiber.gamma*(1.+freq/f0)*getPulseFromSpectrum(freq,NR_func(getSpectrumFromPulse(timeFreq.t, pulse)))
+    NR_in_freq_domain = 1j*dz_m*fiber.gamma*(1.+freq/f0)*getPulseFromSpectrum(freq,NR_func(getSpectrumFromPulse(timeFreq.t, pulse)))
     
     
     return np.exp( getPulseFromSpectrum(freq, NR_in_freq_domain) ) 
     
+  
+#TODO: Make NF and gain frequency dependent?
+def getNoisePSD(NF_dB,gain_dB,f,df):
+    """
+    Calculates PSD of noise from an amplifier behaving like an idealized EDFA:
     
+    https://electricajournal.org/Content/files/sayilar/37/1111-1122.pdf
 
+    Note that amplifier saturation is NOT accounted for, and that the gain 
+    bandwidth is assumed to be infinite (i.e. EVERY frequency experiences 
+                                         amplification!)
+
+    Parameters
+    ----------
+    NF_dB : float
+        Noise factor of the EDFA in dB.
+    gain_dB : float
+        Gain in dB of the EDFA.
+    f : float
+        Frequency at which we want the PSD to be evaluated.
+    df : float
+        Spectral resolution.
+
+    Returns
+    -------
+    float
+        PSD at a certain frequency for a given noise factor, gain and resolution.
+
+    """
+    
+    
+    NF_lin = dB2lin(NF_dB)
+    G_lin = dB2lin(gain_dB)
+    
+    return 0.5*NF_lin*G_lin*h*f/df
     
 
 def SSFM(fiber_span:fiber_span_class,
@@ -1433,10 +1552,11 @@ def SSFM(fiber_span:fiber_span_class,
     """
     print("########### Initializing SSFM!!! ###########")
     
-    t = input_signal.timeFreq.t
-    f = input_signal.timeFreq.f
-    
-    
+    t  = input_signal.timeFreq.t
+    #dt = input_signal.timeFreq.time_step
+    f  = input_signal.timeFreq.f
+    df = input_signal.timeFreq.freq_step
+    fc = input_signal.timeFreq.centerFrequency
     
     #Create output directory, switch to it and return appropriate paths and current time
     dirs , current_time = createOutputDirectory(experimentName)
@@ -1462,7 +1582,6 @@ def SSFM(fiber_span:fiber_span_class,
     #Return to main output directory
     os.chdir(current_dir)
     
-    #TODO: Make sure code handles current_input_signal correctly for concatenated fibers!!!
     current_input_signal = input_signal
     
     ssfm_result_list = []
@@ -1484,8 +1603,9 @@ def SSFM(fiber_span:fiber_span_class,
         os.makedirs(newFolderPath,exist_ok=True)
         os.chdir(newFolderPath)
 
+    
         #Print simulation info to both terminal and .txt file in output folder
-        describeInputConfig(current_time, fiber,  current_input_signal,fiber_index)
+        #describeInputConfig(current_time, fiber,  current_input_signal,fiber_index)
         
         #Return to main output directory
         os.chdir(current_dir)
@@ -1506,10 +1626,19 @@ def SSFM(fiber_span:fiber_span_class,
         if fiber.ramanModel != "None":
             NL_function = NL_full
         
+
         
+
+        
+        inputAttenuationField_lin           = dB2lin(fiber.inputAttenuation_dB/2)
+        outputAttenuationField_lin          = 1.0                   #temporary value until we reach fiber end 
+        noiseASE_ASD                        = 1.0*np.zeros_like(f)  #temporary value until we reach fiber end 
+        outputAmp_factor                    = 1.0                   #temporary value until we reach fiber end 
+        
+
         
         #Initialize arrays to store temporal profile and spectrum while calculating SSFM
-        spectrum = getSpectrumFromPulse(current_input_signal.timeFreq.t, current_input_signal.amplitude,FFT_tol=FFT_tol)*disp_and_loss_half_step
+        spectrum = getSpectrumFromPulse(current_input_signal.timeFreq.t, current_input_signal.amplitude,FFT_tol=FFT_tol)*disp_and_loss_half_step*inputAttenuationField_lin
 
         #spectrum = np.copy(current_input_signal.spectrum )*disp_and_loss_half_step
         pulse    = getPulseFromSpectrum(input_signal.timeFreq.f, spectrum,FFT_tol=FFT_tol)
@@ -1522,10 +1651,6 @@ def SSFM(fiber_span:fiber_span_class,
         #End loop
         #Apply half dispersion step
         
-         
-        
-        
-        
         print(f"Running SSFM with {fiber.numberOfSteps} steps")
         updates = 0
         for z_step_index in range(fiber.numberOfSteps):   
@@ -1537,13 +1662,17 @@ def SSFM(fiber_span:fiber_span_class,
             spectrum = getSpectrumFromPulse(t, pulse,FFT_tol=FFT_tol)*(disp_and_loss) 
             
             if z_step_index == fiber.numberOfSteps-1:
+                randomPhases = np.random.uniform(-pi,pi, len(f))
+                randomPhaseFactor = np.exp(1j*randomPhases)
+                outputAttenuationField_lin = dB2lin(fiber.outputAttenuation_dB/2)
                 outputAmp_factor = 10**(fiber.outputAmplification_dB/2/10)
-            else:
-                outputAmp_factor=1.0
+                noiseASE_ASD = randomPhaseFactor*np.sqrt(getNoisePSD(fiber.noiseFactor_dB,fiber.outputAmplification_dB,f+fc,df))
+                
+
             
             #Apply half dispersion step to spectrum and store results 
-            ssfm_result.spectrumMatrix[z_step_index+1,:]=spectrum*disp_and_loss_half_step*outputAmp_factor
-            ssfm_result.pulseMatrix[z_step_index+1,:]=getPulseFromSpectrum(f, ssfm_result.spectrumMatrix[z_step_index+1,:],FFT_tol=FFT_tol)
+            ssfm_result.spectrumMatrix[z_step_index+1,:] = (spectrum*disp_and_loss_half_step*outputAmp_factor+noiseASE_ASD)*outputAttenuationField_lin
+            ssfm_result.pulseMatrix[z_step_index+1,:]    = getPulseFromSpectrum(f, ssfm_result.spectrumMatrix[z_step_index+1,:],FFT_tol=FFT_tol)
             
             #Return to time domain 
             pulse=getPulseFromSpectrum(f, spectrum,FFT_tol=FFT_tol) 
@@ -2499,8 +2628,7 @@ def waveletTransform(timeFreq:timeFreq_class,
     cwtmatr = signal.cwt(pulse[Nmin_pulse:Nmax_pulse], signal.morlet2, wavelet_durations,dtype=complex)
     
 
-    
-    
+
     
       
     Z = np.abs(cwtmatr)**2
@@ -2523,7 +2651,41 @@ def waveletTransform(timeFreq:timeFreq_class,
     
     
     
-    
+def dB2lin(Val_dB):
+    """
+    Converts value in dB to value in linear scale
+
+    Parameters
+    ----------
+    Val_dB : float
+        Value in dB.
+
+    Returns
+    -------
+    float
+        Value in decimal.
+
+    """
+    return 10**(Val_dB/10)
+
+def lin2dB(Val_lin):
+    """
+    Converts value in linear scale to value in dB
+
+    Parameters
+    ----------
+    Val_lin : float
+        Value in decimal.
+
+    Returns
+    -------
+    float
+        Value in dB.
+
+    """
+    return 10*np.log10(Val_lin)
+
+
 
 
 def wavelengthToFreq(wavelength_m):
@@ -2588,10 +2750,50 @@ def freqBWtoWavelengthBW(freq_Hz,freqBW_Hz):
 
 
 def getGammaFromFiberParams(wavelength_m,n2_m2_W,coreDiameter_m):
+    """
+    Calculates the nonlinear fiber parameter, gamma in 1/W/m.
+
+    Parameters
+    ----------
+    wavelength_m : float
+        Wavelength in m for which we want gamma.
+    n2_m2_W : float
+        Nonlinear refractive index of the material.
+    coreDiameter_m : float
+        Diameter of fiber core.
+
+    Returns
+    -------
+    float
+        gamma in 1/W/m.
+
+    """
     return 2*pi/wavelength_m*n2_m2_W/( pi* coreDiameter_m**2/4  )
   
 
 def extractSpectrumRange(freqList, spectralAmplitude,freq1,freq2):
+    """
+    Takes in a spectrum and extracts only values that fall in a certain range
+    by setting all other ones to zero.
+
+    Parameters
+    ----------
+    freqList : np.array([float])
+        Absolute frequency.
+    spectralAmplitude : np.array([complex])
+        Spectral amplitude.
+    freq1 : float
+        Minimum frequency to be extracted.
+    freq2 : float
+        Maximum frequency to be extracted.
+
+    Returns
+    -------
+    outputArray : np.array([complex])
+        Same as spectralAmplitude but with all entries corresponding to frequencies
+        outside the freq1->freq2 range set to zero.
+
+    """
     
     assert freq1 < freq2, f"Error: freq1 must be smaller than freq2, but freq1 = {freq1}>= {freq2} = freq2 "
     
@@ -2610,6 +2812,27 @@ def extractSpectrumRange(freqList, spectralAmplitude,freq1,freq2):
 
 
 def getValueAtFreq(freqList,freqOfInterest,array):
+    """
+    Helper function to extract value from array. For a discretized spectrum, array,
+    at frequencies freqList, this function allows one to extract the entry in array, which
+    is closes to the one specified by freqOfInterest.
+    
+
+    Parameters
+    ----------
+    freqList : np.array([float])
+        Absolute frequency.
+    freqOfInterest : float
+        Absolute frequency at which we want the value of array.
+    array : np.array([float])
+        Array from which we wish to extract a value.
+
+    Returns
+    -------
+    TYPE float
+        Extracted value.
+
+    """
     
     absArray = np.abs(freqList-freqOfInterest)
     index = absArray.argmin()
@@ -2618,7 +2841,38 @@ def getValueAtFreq(freqList,freqOfInterest,array):
     
 
 
-def getCurrentSNR_dB(freqs,spectrum,channel,signalBW,gap_Hz,freqTol=0.05):
+def getCurrentSNR_dB(freqs,
+                     spectrum,
+                     channel,
+                     signalBW,
+                     gap_Hz,
+                     freqTol=0.05):
+    """
+    
+
+    Parameters
+    ----------
+    freqs : np.array([float])
+        Absolute frequencies of the spectrum.
+    spectrum : np.array([float])
+        Amplitude spectrum of signal whose SNR we want.
+    channel : channel_class
+        Specific channel whose SNR value we want.
+    signalBW : float
+        Frequency bandiwdth of signal in channel.
+    gap_Hz : float
+        Distance from minimum freq of the channel to minimum freq of the signal.
+    freqTol : float (optional)
+    When computing the noise inside the signal BW, use the PSD evaluated at 
+    (1-freqTol) of the distance between the lower freq of the channel and 
+    the lower freq of the signal. The default is 0.05.
+
+    Returns
+    -------
+    SNR_i_dB : float
+        SNR value in dB of the channel for the specified spectrum.
+
+    """
     
     freqTol=np.abs(freqTol)
     
@@ -2650,7 +2904,32 @@ def getCurrentSNR_dB(freqs,spectrum,channel,signalBW,gap_Hz,freqTol=0.05):
 
 def getChannelSNR_dB(ssfm_result_list,
                      channel:channel_class,
-                     signalBW,freqTol=0.05):
+                     signalBW,
+                     freqTol=0.05):
+    """
+    Calculates SNR throughout fiber span for a given channel
+
+    Parameters
+    ----------
+    ssfm_result_list : list[ssfm_result_class]
+        List of ssfm_result_class objects containing signal info for each fiber.
+    channel_list : list[channel_class]
+        List of channel_class objects describing the min, center and max freqs of each channel.
+    signalBW : float
+        Frequency bandwidth of the signal inside each channel.
+    freqTol : float 
+        When computing the noise inside the signal BW, use the PSD evaluated at 
+        (1-freqTol) of the distance between the lower freq of the channel and 
+        the lower freq of the signal. The default is 0.05.
+
+    Returns
+    -------
+    zvals : np.array([float])
+        z-positions of each signal.
+    outputArray : np.array([float])
+        SNR value at each z-position.
+
+    """
     
     zvals = unpackZvals(ssfm_result_list)
     timeFreq = ssfm_result_list[0].input_signal.timeFreq
@@ -2674,6 +2953,28 @@ def getFinalSNR_dB(ssfm_result_list,
                      channel_list:list,
                      signalBW,
                      freqTol=0.05):
+    """
+    Calculates SNR for all channels at output of fiber span
+
+    Parameters
+    ----------
+    ssfm_result_list : list[ssfm_result_class]
+        List of ssfm_result_class objects containing signal info for each fiber.
+    channel_list : list[channel_class]
+        List of channel_class objects describing the min, center and max freqs of each channel.
+    signalBW : float
+        Frequency bandwidth of the signal inside each channel.
+    freqTol : float 
+        When computing the noise inside the signal BW, use the PSD evaluated at 
+        (1-freqTol) of the distance between the lower freq of the channel and 
+        the lower freq of the signal. The default is 0.05.
+
+    Returns
+    -------
+    outputArray : np.array([float])
+        Array containing the SNR value for each channel
+
+    """
     
     freqs = ssfm_result_list[0].input_signal.timeFreq.f+ssfm_result_list[0].input_signal.timeFreq.centerFrequency
     finalSpectrum = ssfm_result_list[-1].spectrumMatrix[-1,:]
@@ -2692,7 +2993,27 @@ def plotFinalSNR_dB(ssfm_result_list,
                      channel_list:list,
                      signalBW,
                      freqTol=0.05):
+    """
+    Plots the SNR at the output of a fiber span
     
+    Parameters
+    ----------
+    ssfm_result_list : list[ssfm_result_class]
+        List of ssfm_result_class objects containing signal info for each fiber.
+    channel_list : list[channel_class]
+        List of channel_class objects describing the min, center and max freqs of each channel.
+    signalBW : float
+        Frequency bandwidth of the signal inside each channel.
+    freqTol : float 
+        When computing the noise inside the signal BW, use the PSD evaluated at 
+        (1-freqTol) of the distance between the lower freq of the channel and 
+        the lower freq of the signal. The default is 0.05.
+
+    Returns
+    -------
+    None.
+
+    """
     
     centerFreq_list=np.zeros(len(channel_list))
     
@@ -2722,16 +3043,40 @@ def plotFinalSNR_dB(ssfm_result_list,
 
     
         
-    
-def plotSNR_NLforChannels(ssfm_result_list,
+#TODO: Allow for variable signal bandwidth depending on channel.    
+def plotSNRforChannels(ssfm_result_list,
                      channel_list,
                      channelNumber_list,
                      signalBW,
                      **kwargs):
+    """
+    Plots the SNR for the specified channels throughout the fiber span.
+
+    Parameters
+    ----------
+    ssfm_result_list : list[ssfm_result_class]
+        List of ssfm_result_class objects containing signal info for each fiber.
+    channel_list : list[channel_class]
+        List of channel_class objects describing the min, center and max freqs of each channel.
+    channelNumber_list : list[int]
+        List of channel numbers to be plotted.
+    signalBW : float
+        Frequency bandwidth of the signal inside each channel.
+    **kwargs : Optional
+        Optional keyword arguments to set ylims of plot.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+
+    
     
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(dpi=125)
-    ax.set_title("Evolution of Nonlinear SNR")
+    ax.set_title("Evolution of SNR")
     
     distance_so_far = 0.0
     for result in ssfm_result_list:
@@ -2742,18 +3087,18 @@ def plotSNR_NLforChannels(ssfm_result_list,
         
         channel=channel_list[channelNumber]
     
-        z,SNR_NL = getChannelSNR_dB(ssfm_result_list,
+        z,SNR = getChannelSNR_dB(ssfm_result_list,
                              channel,
                              signalBW) 
         
         
 
-        ax.plot(z/1e3,SNR_NL,'.',color=f'C{idx}',label=f'Ch# {channelNumber} ')
+        ax.plot(z/1e3,SNR,'.',color=f'C{idx}',label=f'Ch# {channelNumber} ')
         
-        ax.axhline(y=SNR_NL[-1],color=f'C{idx}',alpha=0.4,label=f'Final NL SNR = {SNR_NL[-1]:.2f}')
+        ax.axhline(y=SNR[-1],color=f'C{idx}',alpha=0.4,label=f'Final SNR = {SNR[-1]:.2f}')
         
     ax.set_xlabel("Distance [km]")
-    ax.set_ylabel("$SNR_{NL}$ [dB]")
+    ax.set_ylabel("SNR [dB]")
     
     for kw, value in kwargs.items():
         if kw.lower()=='ylims':
@@ -2771,7 +3116,7 @@ def plotSNR_NLforChannels(ssfm_result_list,
                fancybox=True, 
                shadow=True)
     
-    saveplot('SNR_NL_plot')
+    saveplot('SNR_plot')
     plt.show() 
     os.chdir(ssfm_result_list[0].dirs[0])
     
@@ -2791,7 +3136,7 @@ if __name__ == "__main__":
     
     timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
-    beta_list = [-1e-27] #Dispersion in units of s^(entry+2)/m    
+    beta_list = [-10e-27] #Dispersion in units of s^(entry+2)/m    
     
     fiber_diameter = 9e-6 #m
     n2_silica=2.2e-20 #m**2/W
@@ -2801,168 +3146,184 @@ if __name__ == "__main__":
     #  Initialize fibers
     alpha_test = 0.22/1e3
     
-    length_test=35e3
+    length_test=100e3
     spanloss=alpha_test*length_test
     
-    numberOfSteps_test = 2**9 
     
     firstSegment = 2e3
     
-    fiber_test = fiber_class(firstSegment, 
-                             2**6, 
-                             gamma_test,   
-                             beta_list,    
-                             alpha_test, 
-                             outputAmplification_dB=0  )
-   
 
-    fiber_test2 = fiber_class(length_test-firstSegment, 
+
+    fiber_test = fiber_class(length_test, 
                              2**5, 
                              gamma_test,   
                              beta_list,    
                              alpha_test, 
-                             outputAmplification_dB=spanloss  )
-
-    fiber_test3 = fiber_class(length_test, 
-                             2**5, 
-                             gamma_test,   
-                             beta_list,    
-                             alpha_test, 
-                             outputAmplification_dB=spanloss  )
+                             outputAmplification_dB=spanloss,
+                             noiseFactor_dB=3)
 
     
     
-    fiber_list = [fiber_test,fiber_test2,fiber_test3,fiber_test3,fiber_test3] #
+    fiber_list = [fiber_test] #
     fiber_span = fiber_span_class(fiber_list)
     
     
+    #Set up a single channel
+    Nchannels = 1
+    channel_index = 0
+    
+    channel_list = [None]*Nchannels
+    channel_spacing_Hz = 120e9
+    
+    channelFreqCenter_Hz = centerFreq_test#freq_min_Cband_Hz+channel_spacing_Hz*(0.5+channel_index)
+    channelFreqMin_Hz    = channelFreqCenter_Hz-channel_spacing_Hz/2
+    channelFreqMax_Hz    = channelFreqCenter_Hz+channel_spacing_Hz/2
+    
+    currentChannel = channel_class(channelFreqCenter_Hz, channelFreqMin_Hz, channelFreqMax_Hz)
+    channel_list[channel_index]=currentChannel
+
+
+    Pmin_dBm = 0
+    Pmax_dBm =  24
+    P_steps  =  50
     
     
-    testAmplitude = np.sqrt(1/1e3)                    #Amplitude in units of sqrt(W)
-    testDuration  =50e-12   #Pulse 1/e^2 duration [s]
+    testDuration  =20e-12      
     testTimeOffset    = 0                       #Time offset
     testFreqOffset    = 0             #Freq offset from center frequency
     
     testChirp = 0
-    testPulseType='custom' 
+    testPulseType='sinc' 
     testOrder = 1
     testNoiseAmplitude = 0
     
+    powlist_dBm=np.linspace(Pmin_dBm,Pmax_dBm,P_steps)
+    
+    SNR_list = np.zeros_like(powlist_dBm)
+    
+    testChannel = 0
+    expName="EDFA_development"
+    
+    for pow_index,P_dBm in enumerate(powlist_dBm):
+        
+        testAmplitude = np.sqrt(dB2lin(P_dBm)/1e3)                    #Amplitude in units of sqrt(W)
+        
+    
 
-    testInputSignal = input_signal_class(timeFreq_test, 
-                                          testAmplitude ,
-                                          testDuration,
-                                          testTimeOffset,
-                                          testFreqOffset,                                        
-                                          testChirp,
-                                          testPulseType,
-                                          testOrder,
-                                          testNoiseAmplitude)
-    
-    channel_spacing_Hz = 120e9
-    Nchannels = 40
-    channel_list = [None]*Nchannels
-    
-    
-    
-    for channel_index in range(Nchannels):
-        
-        channelFreqCenter_Hz = freq_min_Cband_Hz+channel_spacing_Hz*(0.5+channel_index)
-        channelFreqMin_Hz    = channelFreqCenter_Hz-channel_spacing_Hz/2
-        channelFreqMax_Hz    = channelFreqCenter_Hz+channel_spacing_Hz/2
-        
-        currentChannel = channel_class(channelFreqCenter_Hz, channelFreqMin_Hz, channelFreqMax_Hz)
-        channel_list[channel_index]=currentChannel
-        
-        
-        testInputSignal.amplitude += getPulse(timeFreq_test.t, 
-                                              testAmplitude, 
-                                              testDuration, 
+        testInputSignal = input_signal_class(timeFreq_test, 
+                                              testAmplitude ,
+                                              testDuration,
                                               testTimeOffset,
-                                              timeFreq_test.centerFrequency-currentChannel.centerFreq_Hz,                                        
+                                              testFreqOffset,                                        
                                               testChirp,
-                                              'sinc',
+                                              testPulseType,
                                               testOrder,
                                               testNoiseAmplitude)
-    testInputSignal.update_spectrum()
+        
+        #Run SSFM
+        ssfm_result_list = SSFM(fiber_span, 
+                                testInputSignal,
+                                showProgressFlag=True,
+                                experimentName=expName,
+                                FFT_tol=5e-5)
+        
+        finalSNR_dB=getFinalSNR_dB(ssfm_result_list,
+                                   channel_list,
+                                   1/testDuration)
+        
+        SNR_list[pow_index]=finalSNR_dB
     
-    testChannel =38
     
-    fig,ax=plt.subplots()
-    ax.plot(testInputSignal.timeFreq.f/1e12+testInputSignal.timeFreq.centerFrequency/1e12,getPower(testInputSignal.spectrum))
-    ax.plot(testInputSignal.timeFreq.f/1e12+testInputSignal.timeFreq.centerFrequency/1e12,getPower(extractSpectrumRange(testInputSignal.timeFreq.f/1e12+testInputSignal.timeFreq.centerFrequency/1e12, testInputSignal.spectrum,channel_list[testChannel].minFreq_Hz/1e12,channel_list[testChannel].maxFreq_Hz/1e12)))
-    ax.axvline(x=freq_min_Cband_Hz/1e12,color='C3')
-    ax.axvline(x=freq_max_Cband_Hz/1e12,color='C3')
     
-
-
     
-    #plt.axis([channel_list[21].minFreq_Hz/1e12-0.3,channel_list[21].maxFreq_Hz/1e12+0.3,1e-27,1e-23])
-    ax.set_yscale('log')
+    from scipy.optimize import curve_fit
+    
+    
+    def SNRfunc_dB(P_dBm,a,b):
+        P_lin = dB2lin(P_dBm)
+        return -lin2dB(a/P_lin+b*P_lin**(2))
+    
+    popt, pcov = curve_fit(SNRfunc_dB, powlist_dBm,SNR_list)
+    
+    fig,ax=plt.subplots(dpi=200)
+    ax.plot(powlist_dBm,SNR_list,'.-',label='data',color='C2')
+    ax.plot(powlist_dBm, SNRfunc_dB(powlist_dBm, popt[0], popt[1]), '-',
+         label='Fitted function',color='k')
+    
+    ax.plot(powlist_dBm, SNRfunc_dB(powlist_dBm,popt[0],0), '-',label='Linear term $\propto P$ ',color='C1')
+    ax.plot(powlist_dBm, SNRfunc_dB(powlist_dBm,0,popt[1]), '-',label='Nonlinear term$\propto P^{-2}$ ',color='C0')
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(
+               loc='upper center', 
+               bbox_to_anchor=(0.5, 1.25),
+               ncol=2, 
+               fancybox=True, 
+               shadow=True)
+    
+    ax.set_ylabel('SNR [dB]')
+    ax.set_xlabel('$P_{launch}$ [dBm]',color='C3')
+    ax.grid()
+    ax.set_ylim(0,np.max(SNR_list)*1.3)
+    plt.savefig("SNR_graph.png", bbox_inches='tight', pad_inches=0)
     plt.show()
     
     
     
 
-       
 
+    
+    
 
+    
+    
+    
+    
 
+    
+    # #Plot pulses
+    # nrange_test_pulse=2000
+    # cutoff_test_pulse=-60
 
+    # #Plot spectrum
+    # nrange_test_spectrum=int(2000)
+    # cutoff_test_spectrum=-60
+    
+    # #plotFirstAndLastPulse(ssfm_result_list,nrange_test_pulse, cutoff_test_pulse)
+    # #plotFirstAndLastSpectrum(ssfm_result_list, nrange_test_spectrum,cutoff_test_spectrum)
+    
+    # # plotEverythingAboutSpectra(ssfm_result_list,
+    # #                                 nrange_test_spectrum, 
+    # #                                 cutoff_test_spectrum)
+    
+    
+    # plotEverythingAboutResult(ssfm_result_list,
+    #                           nrange_test_pulse,
+    #                           cutoff_test_pulse,
+    #                           nrange_test_spectrum,
+    #                           cutoff_test_spectrum,
+    #                           skip_chirp_plot_flag = True
+    #                           )
+    
+    # plotFirstAndLastSpectrum(ssfm_result_list, int(len(testInputSignal.timeFreq.t)*0.3), cutoff_test_spectrum)
+    
+    
+    # plotSNRforChannels(ssfm_result_list,
+    #                      channel_list,
+    #                      [0],
+    #                      1/testDuration) #
+    
 
-    expName="TelecomSim_development"
-    #Run SSFM
-    ssfm_result_list = SSFM(fiber_span, 
-                            testInputSignal,
-                            showProgressFlag=True,
-                            experimentName=expName,
-                            FFT_tol=5e-5)
-    
-    
-    
-    #Plot pulses
-    nrange_test_pulse=2000
-    cutoff_test_pulse=-60
-
-    #Plot spectrum
-    nrange_test_spectrum=int(2000)
-    cutoff_test_spectrum=-60
-    
-    #plotFirstAndLastPulse(ssfm_result_list,nrange_test_pulse, cutoff_test_pulse)
-    #plotFirstAndLastSpectrum(ssfm_result_list, nrange_test_spectrum,cutoff_test_spectrum)
-    
-    # plotEverythingAboutSpectra(ssfm_result_list,
-    #                                 nrange_test_spectrum, 
-    #                                 cutoff_test_spectrum)
-    
-    
-    plotEverythingAboutResult(ssfm_result_list,
-                              nrange_test_pulse,
-                              cutoff_test_pulse,
-                              nrange_test_spectrum,
-                              cutoff_test_spectrum,
-                              skip_chirp_plot_flag = True
-                              )
-    
-    plotFirstAndLastSpectrum(ssfm_result_list, int(len(testInputSignal.timeFreq.t)*0.3), cutoff_test_spectrum)
-    
-    
-    plotSNR_NLforChannels(ssfm_result_list,
-                         channel_list,
-                         [5,23,35],
-                         1/testDuration) #
-    
-    plotSNR_NLforChannels(ssfm_result_list,
-                         channel_list,
-                         [5,23,35],
-                         1/testDuration,
-                         ylims=(21.2,24.2)) #
                          
     
     
-    plotFinalSNR_dB(ssfm_result_list,
-                     channel_list,
-                     1/testDuration)
+    # plotFinalSNR_dB(ssfm_result_list,
+    #                  channel_list,
+    #                  1/testDuration)
+    
+
+    
     
 
     
