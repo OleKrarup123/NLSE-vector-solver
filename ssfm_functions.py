@@ -25,12 +25,14 @@ from datetime import datetime
 #Characteristic frequencies of L-band
 freq_min_Lband_Hz = 186.05*1e12
 freq_max_Lband_Hz = 190.875*1e12
+freq_center_Lband_Hz = (freq_min_Lband_Hz+freq_max_Lband_Hz)/2
 freq_width_Lband_Hz = freq_max_Lband_Hz-freq_min_Lband_Hz
 
 #Characteristic frequencies of C-band
 freq_min_Cband_Hz = 191.275*1e12
 freq_max_Cband_Hz = 196.15*1e12
 freq_width_Cband_Hz = freq_max_Cband_Hz-freq_min_Cband_Hz
+freq_center_Cband_Hz = (freq_min_Cband_Hz+freq_max_Cband_Hz)/2
 
 
 
@@ -38,7 +40,7 @@ freq_width_Cband_Hz = freq_max_Cband_Hz-freq_min_Cband_Hz
 
 
 
-def getFreqRangeFromTime(time_s):
+def getFreqRangeFromTime(time_s: np.ndarray[float]) -> np.ndarray[float]:
     """ 
     Calculate frequency range for spectrum based on time basis. 
     
@@ -57,7 +59,7 @@ def getFreqRangeFromTime(time_s):
     
     return fftshift(fftfreq(len(time_s), d=time_s[1]-time_s[0]))
 
-def getPhase(pulse):
+def getPhase(pulse: np.ndarray[complex]) -> np.ndarray[float]:
     """ 
     Gets the phase of the pulse from its complex angle
     
@@ -78,7 +80,7 @@ def getPhase(pulse):
     return phi    
 
 
-def getChirp(time_s,pulse):
+def getChirp(time_s:np.ndarray[float],pulse: np.ndarray[complex])-> np.ndarray[float]:
     """ 
     Get local chirp at every instance of pulse
 
@@ -100,6 +102,7 @@ def getChirp(time_s,pulse):
     return -1.0/(2*pi)*dphi/dt #Chirp = - 1/(2pi) * d(phi)/dt
     
 
+#TODO: Change to ChannelClass to adhere to python style guide
 class channel_class:
     """
     Class for storing info about a certain frequency channel. 
@@ -112,20 +115,38 @@ class channel_class:
         
     """
     
-    def __init__(self,centerFreq_Hz,minFreq_Hz,maxFreq_Hz):
+    def __init__(self,
+                 channelCenterFreq_Hz: float,
+                 channelMinFreq_Hz: float,
+                 channelMaxFreq_Hz: float, 
+                 signalCenterFreq_Hz: float,
+                 signalBW_Hz: float):
         
         #Quick sanity check that center frequency is between min and max
-        assert minFreq_Hz    < maxFreq_Hz,    f"Error: minFreq_Hz    must be smaller than maxFreq_Hz,    but minFreq_Hz    = {minFreq_Hz}   >= {maxFreq_Hz}    = maxFreq_Hz "
-        assert centerFreq_Hz < maxFreq_Hz,    f"Error: centerFreq_Hz must be smaller than maxFreq_Hz,    but centerFreq_Hz = {centerFreq_Hz}>= {maxFreq_Hz}    = maxFreq_Hz "
-        assert minFreq_Hz    < centerFreq_Hz, f"Error: minFreq_Hz    must be smaller than centerFreq_Hz, but minFreq_Hz    = {minFreq_Hz}   >= {centerFreq_Hz} = centerFreq_Hz "
+        assert channelMinFreq_Hz    < channelMaxFreq_Hz,    f"Error: channelMinFreq_Hz    must be smaller than channelMaxFreq_Hz,    but channelMinFreq_Hz    = {channelMinFreq_Hz}   >= {channelMaxFreq_Hz}    = channelMaxFreq_Hz "
+        assert channelCenterFreq_Hz < channelMaxFreq_Hz,    f"Error: channelCenterFreq_Hz must be smaller than maxFreq_Hz,    but channelCenterFreq_Hz = {channelCenterFreq_Hz}>= {channelMaxFreq_Hz}    = channelMaxFreq_Hz "
+        assert channelMinFreq_Hz    < channelCenterFreq_Hz, f"Error: channelMinFreq_Hz    must be smaller than centerFreq_Hz, but channelMinFreq_Hz    = {channelMinFreq_Hz}   >= {channelCenterFreq_Hz} = channelCenterFreq_Hz "
 
         
-        self.centerFreq_Hz = centerFreq_Hz
-        self.minFreq_Hz = minFreq_Hz
-        self.maxFreq_Hz = maxFreq_Hz
-        self.channelWidth_Hz = self.maxFreq_Hz - self.minFreq_Hz
+        self.channelCenterFreq_Hz = channelCenterFreq_Hz
+        self.channelMinFreq_Hz = channelMinFreq_Hz
+        self.channelMaxFreq_Hz = channelMaxFreq_Hz
+        self.channelWidth_Hz = self.channelMaxFreq_Hz - self.channelMinFreq_Hz
         
-
+        self.signalCenterFreq_Hz = signalCenterFreq_Hz
+        self.signalBW_Hz = signalBW_Hz
+        self.signalMinFreq_Hz = self.signalCenterFreq_Hz-0.5*self.signalBW_Hz
+        self.signalMaxFreq_Hz = self.signalCenterFreq_Hz+0.5*self.signalBW_Hz
+        
+        assert signalBW_Hz>0, f"Error: {signalBW_Hz =} but should be greater than zero! "
+        assert channelMinFreq_Hz    <= self.signalMinFreq_Hz,    f"Error: channelMinFreq_Hz    must be smaller than signalMinFreq_Hz,    but channelMinFreq_Hz    = {channelMinFreq_Hz}   > {self.signalMinFreq_Hz}    = signalMinFreq_Hz "
+        assert channelMaxFreq_Hz    >= self.signalMaxFreq_Hz,    f"Error: channelMaxFreq_Hz    must be greater than signalMaxFreq_Hz,    but channelMaxFreq_Hz    = {channelMaxFreq_Hz}   < {self.signalMaxFreq_Hz}    = signalMaxFreq_Hz "
+        
+        self.leftGap_Hz = self.signalMinFreq_Hz - self.channelMinFreq_Hz
+        self.rightGap_Hz = self.channelMaxFreq_Hz - self.signalMaxFreq_Hz
+        
+        
+#TODO: Change to TimeFreqClass to adhere to python style guide
 class timeFreq_class:
     """
     Class for storing info about the time axis and frequency axis. 
@@ -144,15 +165,30 @@ class timeFreq_class:
         freq_step (float): Frequency resolution
     """
     
-    def __init__(self,N,dt,centerFrequency):        
+    def __init__(self,
+                 N: int,
+                 dt: float,
+                 centerFrequency: float):        
         """
-        Constructor for the timeFreq_class
         
-        Parameters:
-            self
-            N (int): Number of time points
-            dt (float): Duration of each time step
+        Constructor for the timeFreq_class
+
+
+        Parameters
+        ----------
+        N : int
+            Number of time points.
+        dt : float
+            Duration of each time step.
+        centerFrequency : float
+            Carrier frequency of the spectrum.
+
+        Returns
+        -------
+        None.
+
         """
+        
         
         self.number_of_points=N
         self.time_step=dt
@@ -171,12 +207,19 @@ class timeFreq_class:
         
     def describe_config(self,destination = None):
         """
-        Prints a description of the time and frequency info to destination
+        Prints information about the initialized TimeFreq class to file or terminal (default)          
         
-        Parameters:
-            self
-            destination (class '_io.TextIOWrapper') (optional): File to which destination should be printed. If None, print to console
+        Parameters
+        ----------
+        destination, optional
+            File to which the output should be printed. The default is None, which prints to terminal.
+
+        Returns
+        -------
+        None.
+
         """
+        
         
         print(" ### timeFreq Configuration Parameters ###" , file = destination)
         print(f"  Number of points \t\t= {self.number_of_points}", file = destination)
@@ -209,7 +252,7 @@ class timeFreq_class:
         
     
 
-def load_timeFreq(path:str): 
+def load_timeFreq(path:str) -> timeFreq_class: 
     """ 
     Loads timeFreq_class for previous run
 
@@ -236,32 +279,36 @@ def load_timeFreq(path:str):
 
         
 
-def getPower(amplitude_in_time_or_freq_domain):
-    
-    """ 
+def getPower(amplitude_in_time_or_freq_domain: np.ndarray[complex]) -> np.ndarray[float]:
+    """
     Computes temporal power or PSD
 
-    For a real electric field,    P = 1/T int_0^T( E_real**2 )dt.
-    For a complex electric field, P = 0.5*|E|**2.
+    For a real electric field, power averaged over an optical cycle is P = 1/T int_0^T( E_real**2 )dt.
+    For a complex electric field, this same power is calculated as P = 0.5*|E|**2.
     Using the complex field makes calculations easier and the factor of
     0.5 is simply absorbed into the nonlinear parameter, gamma.
     Same thing works in the frequency domain.
 
-    Parameters:
-        amplitude_in_time_or_freq_domain (nparray): Temporal or spectral amplitude
-        
-    Returns:
-        nparray: Temporal power or PSD at any instance or frequency 
+    Parameters
+    ----------
+    amplitude_in_time_or_freq_domain : np.ndarray[complex]
+        Temporal or spectral amplitude.
+
+    Returns
+    -------
+    np.ndarray[float]
+        Temporal power (W) or PSD (J/Hz) at any instance or frequency.
 
     """
+    
     
     return np.abs(amplitude_in_time_or_freq_domain)**2  
 
 
 
-def getEnergy(time_or_freq,
-              amplitude_in_time_or_freq_domain):
-    """ 
+def getEnergy(time_or_freq: np.ndarray[float],
+              amplitude_in_time_or_freq_domain: np.ndarray[complex]) -> float:
+    """
     Computes energy of signal or spectrum
 
     Gets the power or PSD of the signal from 
@@ -269,12 +316,17 @@ def getEnergy(time_or_freq,
     and integrates it w.r.t. either time or 
     frequency to get the energy. 
 
-    Parameters:
-        time_or_freq (nparray): Time range in seconds or freq. range in Hz
-        amplitude_in_time_or_freq_domain (nparray): Temporal or spectral amplitude
-        
-    Returns:
-        float: Energy in J 
+    Parameters
+    ----------
+    time_or_freq : np.ndarray[float]
+        Time range in seconds or freq. range in Hz.
+    amplitude_in_time_or_freq_domain : np.ndarray[complex]
+        Temporal amplitude in [sqrt(W)] or spectral amplitude [sqrt(J/Hz)].
+
+    Returns
+    -------
+    float
+        Signal energy in J .
 
     """
     
@@ -283,180 +335,239 @@ def getEnergy(time_or_freq,
 
 
 #TODO: Decide if "duration" should be FWHM or HWHM for different pulse types!
+def GaussianPulse(time_s:  np.ndarray[float],
+                  peakAmplitude: float,
+                  duration_s: float,
+                  time_offset_s: float,
+                  freq_offset_Hz: float,
+                  chirp: float,
+                  order: int) -> np.ndarray[complex]: 
+    """
+    Generates a (super) gaussian pulse with the specified power, duration, offset, frequency shift, (order) and chirp.
 
-def GaussianPulse(time_s,
-                  peakAmplitude,
-                  duration_s,
-                  time_offset_s,
-                  freq_offset_Hz,
-                  chirp,
-                  order):
-    """ 
-    Creates Gaussian pulse
+    Parameters
+    ----------
+    time_s : np.ndarray[float]
+        Time range in seconds.
+    peakAmplitude : float
+        Peak amplitude in units of sqrt(W)
+    duration_s : float
+       RMS width of Gaussian, i.e. time at which the amplitude is reduced by a factor exp(-0.5) = 0.6065 .
+    time_offset_s : float
+        Time at which the Gaussian peaks.
+    freq_offset_Hz : float
+        Center frequency relative to carrier frequency specified in timeFreq.
+    chirp : float
+        Dimensionless parameter controlling the chirp.
+    order : int
+        Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'.
 
-    Generates a Gaussian pulse with the specified properties. 
-
-    Parameters:
-        time_s          (nparray): Time range in seconds
-        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
-        duration_s      (float)  : RMS width of Gaussian, i.e. time at which the amplitude is reduced by a factor exp(-0.5) = 0.6065 
-        time_offset_s   (float)  : Time at which the Gaussian peaks
-        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
-        chirp           (float)  : Dimensionless parameter controlling the chirp
-        order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
-        
-    Returns:
-        nparray: Gaussian pulse in time domain in units of sqrt(W)
+    Returns
+    -------
+    np.ndarray[complex]
+        Gaussian pulse in time domain in units of sqrt(W).
 
     """
-    
+  
     
     assert order >= 1, f"Error: Order of gaussian pulse is {order}. Must be >=1"
     carrier_freq = np.exp(-1j*2*pi*freq_offset_Hz*time_s)
 
     return peakAmplitude*np.exp(- (1+1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**(2*np.floor(order)))*carrier_freq
 
-def squarePulse(time_s,
-                peakAmplitude,
-                duration_s,
-                time_offset_s,
-                freq_offset_Hz,
-                chirp): 
-    """ 
-    Creates square pulse
-    
-    Generates a square pulse using a high order super-Gaussian pulse. 
-    
-    Parameters:
-        time_s          (nparray): Time range in seconds
-        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
-        duration_s      (float)  : Width of square pulse
-        time_offset_s   (float)  : Central time of square pulse
-        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
-        chirp           (float)  : Dimensionless parameter controlling the chirp
-        
-    Returns:
-        nparray: Square pulse in time domain in units of sqrt(W)
-    
+def squarePulse(time_s:  np.ndarray[float],
+                  peakAmplitude: float,
+                  duration_s: float,
+                  time_offset_s: float,
+                  freq_offset_Hz: float,
+                  chirp: float) -> np.ndarray[complex]: 
+    """
+    Generates a square pulse with the specified power, duration, offset, frequency shift and chirp.
+
+    Parameters
+    ----------
+    time_s : np.ndarray[float]
+        Time range in seconds.
+    peakAmplitude : float
+        Peak amplitude in units of sqrt(W).
+    duration_s : float
+        Total duration of the square pulse.
+    time_offset_s : float
+        Time at which the pulse peaks.
+    freq_offset_Hz : float
+        Center frequency relative to carrier frequency specified in timeFreq.
+    chirp : float
+        Dimensionless parameter controlling the chirp.
+   
+
+    Returns
+    -------
+    np.ndarray[complex]
+        Square pulse in time domain in units of sqrt(W).
+
     """
     
     return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,100)
 
-def sincPulse(time_s,
-                peakAmplitude,
-                duration_s,
-                time_offset_s,
-                freq_offset_Hz,
-                chirp):
+
+def sincPulse(time_s:           np.ndarray[float],
+              peakAmplitude:    float,
+              duration_s:       float,
+              time_offset_s:    float,
+              freq_offset_Hz:   float,
+              chirp:            float) -> np.ndarray[complex]:
     
-    """ 
+    """
     Creates a sinc pulse (sin(pi*x)/(pi*x))
     
     Generates a sinc pulse, which is useful as its spectral shape will be square. 
+     
+    Parameters
+    ----------
+    time_s : np.ndarray[float]
+        Time range in seconds.
+    peakAmplitude : float
+        Peak amplitude in units of sqrt(W)
+    duration_s : float
+       Time (relative to peak) at which the first zero of the sinc function is reached; 'Half width at first zero'  .
+    time_offset_s : float
+        Time at which the pulse peaks.
+    freq_offset_Hz : float
+        Center frequency relative to carrier frequency specified in timeFreq.
+    chirp : float
+        Dimensionless parameter controlling the chirp.
+       
+     
+    Returns
+    -------
+    np.ndarray[complex]
+        Sinc pulse in time domain in units of sqrt(W).
+     
+    """
     
-    Parameters:
-        time_s          (nparray): Time range in seconds
-        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
-        duration_s      (float)  : Time at which the first zero of the sinc function is reached 
-        time_offset_s   (float)  : Central time of square pulse
-        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
-        chirp           (float)  : Dimensionless parameter controlling the chirp
-        
-    Returns:
-        nparray: Square pulse in time domain in units of sqrt(W)
-    """ 
+
     carrier_freq = np.exp(-1j*2*pi*freq_offset_Hz*time_s)
     chirp_factor = np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)
     
     return peakAmplitude*np.sinc(  (time_s-time_offset_s)/(duration_s) )*chirp_factor*carrier_freq
        
 
-def sechPulse(time_s,
-              peakAmplitude,
-              duration_s,
-              time_offset_s,
-              freq_offset_Hz,
-              chirp):  
-    """ 
+def sechPulse(time_s:           np.ndarray[float],
+              peakAmplitude:    float,
+              duration_s:       float,
+              time_offset_s:    float,
+              freq_offset_Hz:   float,
+              chirp:            float) -> np.ndarray[complex]:
+    """
     Creates hyperbolic secant pulse
     
     Generates a hyperbolic secant pulse (1/cosh(t)), which is the pulse shape that
     corresponds to a fundamental soliton; a solution to the NLSE for anormalous dispersion
     where the pulse remains unchanged as it propagates down the fiber.
-    
-    Parameters:
-        time_s          (nparray): Time range in seconds
-        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
-        duration_s      (float)  : Width of sech pulse, i.e. time at which the amplitude is reduced by a factor sech(1) = 0.64805 
-        time_offset_s   (float)  : Time at which the Gaussian peaks
-        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
-        chirp           (float)  : Dimensionless parameter controlling the chirp
-        
-        
-        
-    Returns:
-        nparray: Sech pulse in time domain in units of sqrt(W)
-    
+
+    Parameters
+    ----------
+    time_s : np.ndarray[float]
+        Time range in seconds.
+    peakAmplitude : float
+        Peak amplitude in units of sqrt(W)
+    duration_s : float
+        Characteristic duration of sech pulse. 
+    time_offset_s : float
+        Time at which the pulse peaks.
+    freq_offset_Hz : float
+        Center frequency relative to carrier frequency specified in timeFreq.
+    chirp : float
+        Dimensionless parameter controlling the chirp.
+
+    Returns
+    -------
+    np.ndarray[complex]
+        Sech pulse in time domain in units of sqrt(W).
+
     """
+    
     carrier_freq = np.exp(-1j*2*pi*freq_offset_Hz*time_s)
     chirp_factor = np.exp(- (1j*chirp)/2*((time_s-time_offset_s)/(duration_s))**2)
     return peakAmplitude/np.cosh((time_s-time_offset_s)/duration_s)*chirp_factor*carrier_freq
 
 
-def noise_ASE(time_s,noiseAmplitude):
-    """ 
-    Generates white noise in the time domain with the specified amplitude
+def noise_ASE(time_s:         np.ndarray[float],
+              noiseStdev: float)->np.ndarray[complex]:
+    """
+    Generates white noise in the time domain with the specified Standard Deviation
     
     Generates an array of complex numbers with random phase from -pi to pi and 
     amplitudes distributed normally around 0 and a standard 
-    deviation of noiseAmplitude in units of sqrt(W). 
-    
-    Parameters:
-        time_s           (nparray): Time range in seconds
-        noiseAmplitude   (float)  : StDev of amplitude noise
-        
-    Returns:
-        nparray: Random amplitudes and phases to be added to signal 
-    
+    deviation of noiseStdev in units of sqrt(W). 
+
+    Parameters
+    ----------
+    time_s : np.ndarray[float]
+        Time range in seconds.
+    noiseStdev : float
+        Standard deviation of temporal amplitude fluctuations in sqrt(W). 
+
+    Returns
+    -------
+    np.ndarray[complex]
+        White noise.
+
     """
-    randomAmplitudes=np.random.normal(loc=0.0, scale=noiseAmplitude, size=len(time_s))*(1+0j)
+    
+    randomAmplitudes=np.random.normal(loc=0.0, scale=noiseStdev, size=len(time_s))*(1+0j)
     randomPhases = np.random.uniform(-pi,pi, len(time_s))
     return randomAmplitudes*np.exp(1j*randomPhases)   
 
 
-def getPulse(time_s,
-             peakAmplitude,
-             duration_s,
-             time_offset_s,
-             freq_offset_Hz,
-             chirp,
-             pulseType,
-             order,
-             noiseAmplitude):
-    """ 
-    Creates pulse with the specified properties
+def getPulse(time_s:            np.ndarray[float],
+              peakAmplitude:    float,
+              duration_s:       float,
+              time_offset_s:    float,
+              freq_offset_Hz:   float,
+              chirp:            float,
+              pulseType:        str,
+              order:            int = 1,
+              noiseStdev:   float = 0.0)->np.ndarray[complex]:
+    """
+    Helper function that creates pulse with the specified properties
 
-    Creates a Gaussian, sech or square pulse based on the 'pulseType' parameter.
+    Creates a Gaussian, sech, sinc or square pulse based on the 'pulseType' parameter.
     If pulseType == 'custom' it is assumed that the user wants to specify
     the pulse amplitude 'manually', in which case only noise is returned.
 
-    Parameters:
-        time_s          (nparray): Time range in seconds
-        peakAmplitude   (float)  : Peak amplitude in units of sqrt(W)
-        duration_s      (float)  : RMS width of Gaussian, i.e. time at which the amplitude is reduced by a factor exp(-0.5) = 0.6065 
-        time_offset_s   (float)  : Time at which the Gaussian peaks
-        freq_offset_Hz  (float)  : Center frequency relative to carrier frequency specified in timeFreq.
-        chirp           (float)  : Dimensionless parameter controlling the chirp
-        order           (int)    : Controls shape of pulse as exp(-x**(2*order)) will be approximately square for large values of 'order'
-        
-    Returns:
-        nparray: Gaussian pulse in time domain in units of sqrt(W)
-    
+    Parameters
+    ----------
+    time_s : np.ndarray[float]
+        Time range in seconds.
+    peakAmplitude : float
+        Peak amplitude in units of sqrt(W)
+    duration_s : float
+        Characteristic duration of sech pulse. 
+    time_offset_s : float
+        Time at which the pulse peaks.
+    freq_offset_Hz : float
+        Center frequency relative to carrier frequency specified in timeFreq.
+    chirp : float
+        Dimensionless parameter controlling the chirp.
+    pulseType : str
+        String that determines which pulse type should be generated.
+    order : int, optional
+        Order of the Super Gaussian (exp[-x^(2*order)]). The default is 1.
+    noiseStdev : float, optional
+        Standard deviation of temporal amplitude fluctuations in sqrt(W). The default is 0.0.
+
+    Returns
+    -------
+    np.ndarray[complex]
+        Specified pulse in time domain in units of sqrt(W).
+
     """
+
     
-    noise = noise_ASE(time_s,noiseAmplitude)
+    noise = noise_ASE(time_s,noiseStdev)
     
-    if pulseType.lower()=="gaussian":
+    if pulseType.lower() in ["gaussian","gauss"]:
         return GaussianPulse(time_s,peakAmplitude,duration_s,time_offset_s,freq_offset_Hz,chirp,order)+noise
     
     if pulseType.lower()=="sech":
@@ -473,26 +584,35 @@ def getPulse(time_s,
         return noise
 
 
-def getSpectrumFromPulse(time_s,pulse_amplitude,FFT_tol=1e-7):
-    """ 
-    Converts the amplitude of a signal in the time domain to spectral amplitude in freq. domain
-    
-    Uses the FFT to shift from time to freq. domain and ensures that energy is conserved
-    
-    Parameters:
-        time_s          (nparray): Time range in seconds
-        pulse_amplitude (nparray): Pulse amplitude in sqrt(W)
-        FFT_tol=1e-7 (float) (optional): Maximum fractional change in signal energy when doing FFT
-
-        
-    Returns:
-        nparray: spectrum amplitude in sqrt(W)/Hz.  
-    
+def getSpectrumFromPulse(time_s:          np.ndarray[float],
+                         pulse_amplitude: np.ndarray[complex],
+                         FFT_tol:         float=1e-7) -> np.ndarray[complex]:
     """
+    
+
+    Parameters
+    ----------
+    time_s : np.ndarray[float]
+        Time range in seconds.
+    pulse_amplitude : np.ndarray[complex]
+        Complex amplitude of pulse in time domain in units of sqrt(W).
+    FFT_tol : float, optional
+        When computing the FFT and going from temporal to spectral domain, the 
+        energy (which theoretically should be conserved) cannot change fractionally 
+        by more than FFT_tol. The default is 1e-7.
+
+    Returns
+    -------
+    spectrum_amplitude : np.ndarray[complex]
+        Complex spectral amplitude in units of sqrt(J/Hz).
+
+    """
+    
     pulseEnergy=getEnergy(time_s,pulse_amplitude) #Get pulse energy
     f=getFreqRangeFromTime(time_s) 
     dt=time_s[1]-time_s[0]
     
+    assert dt>0, f"ERROR: dt must be positive, but {dt=}. {time_s[1]=},{time_s[0]=}"
     spectrum_amplitude=fftshift(fft(pulse_amplitude))*dt #Take FFT and do shift
     spectrumEnergy=getEnergy(f, spectrum_amplitude) #Get spectrum energy
     
@@ -857,8 +977,9 @@ class input_signal_class:
                                   pulseType,
                                   order,
                                   noiseAmplitude)
+        
         self.spectrum=1j*np.zeros_like(self.amplitude)
-        self.update_spectrum()
+        
         
         self.Pmax=0.0
         self.update_Pmax()
@@ -871,8 +992,7 @@ class input_signal_class:
         if getEnergy(self.timeFreq.t, self.amplitude) == 0.0:
             self.spectrum = np.copy(self.amplitude)  
         else:
-            self.spectrum = getSpectrumFromPulse(self.timeFreq.t,self.amplitude,FFT_tol=self.FFT_tol)   
-        
+            self.update_spectrum()        
         
         if showOutput==True:
             self.describe_input_signal()
@@ -1612,13 +1732,15 @@ def SSFM(fiber_span:fiber_span_class,
         
         #Pre-calculate dispersion term
         dispterm=np.zeros_like(input_signal.timeFreq.f)*1.0
-        for n, beta_n in enumerate(fiber.beta_list):
-            dispterm+=beta_n/np.math.factorial(n)*(2*pi*input_signal.timeFreq.f)**(n+2)
+        for idx, beta_n in enumerate(fiber.beta_list): 
+            n=idx+2 #Note: zeroth entry in beta_list is beta2
+            dispterm+=beta_n/np.math.factorial(n)*(2*pi*input_signal.timeFreq.f)**(n)
        
         
         #Pre-calculate effect of dispersion and loss as it's the same everywhere
         disp_and_loss=np.exp(fiber.dz*(1j*dispterm-fiber.alpha_Np_per_m/2))
         disp_and_loss_half_step = disp_and_loss**0.5
+        
         #Precalculate constants for nonlinearity
         
         #Use simply NL model by default if Raman is ignored
@@ -2844,8 +2966,6 @@ def getValueAtFreq(freqList,freqOfInterest,array):
 def getCurrentSNR_dB(freqs,
                      spectrum,
                      channel,
-                     signalBW,
-                     gap_Hz,
                      freqTol=0.05):
     """
     
@@ -2858,14 +2978,10 @@ def getCurrentSNR_dB(freqs,
         Amplitude spectrum of signal whose SNR we want.
     channel : channel_class
         Specific channel whose SNR value we want.
-    signalBW : float
-        Frequency bandiwdth of signal in channel.
-    gap_Hz : float
-        Distance from minimum freq of the channel to minimum freq of the signal.
     freqTol : float (optional)
-    When computing the noise inside the signal BW, use the PSD evaluated at 
-    (1-freqTol) of the distance between the lower freq of the channel and 
-    the lower freq of the signal. The default is 0.05.
+        When computing the noise inside the signal BW, use the PSD evaluated at 
+        (1-freqTol) of the distance between the lower freq of the channel and 
+        the lower freq of the signal. The default is 0.05.
 
     Returns
     -------
@@ -2878,18 +2994,20 @@ def getCurrentSNR_dB(freqs,
     
     assert freqTol<1, f"ERROR: freqTol = {freqTol}, but should be smaller than 1!"
     
-    signal = extractSpectrumRange(freqs, spectrum,channel.minFreq_Hz+gap_Hz ,channel.maxFreq_Hz-gap_Hz)
+    signal = extractSpectrumRange(freqs, spectrum,channel.signalMinFreq_Hz ,channel.signalMaxFreq_Hz)
     signalEnergy = getEnergy(freqs, signal)
     
-    noiseBelow = extractSpectrumRange(freqs, spectrum,channel.minFreq_Hz,channel.minFreq_Hz+gap_Hz)
-    noiseAbove = extractSpectrumRange(freqs, spectrum,channel.maxFreq_Hz-gap_Hz,channel.maxFreq_Hz)
+    noiseBelow = extractSpectrumRange(freqs, spectrum,channel.channelMinFreq_Hz,channel.signalMinFreq_Hz)
+    noiseAbove = extractSpectrumRange(freqs, spectrum,channel.signalMaxFreq_Hz,channel.channelMaxFreq_Hz)
     
     noiseEnergyBelow=getEnergy(freqs, noiseBelow)
     noiseEnergyAbove=getEnergy(freqs, noiseAbove)
     
     
-    leftEdgeNoisePSD = np.abs(getValueAtFreq(freqs,channel.minFreq_Hz+gap_Hz*(1-freqTol),noiseBelow))**2
-    rightEdgeNoisePSD = np.abs(getValueAtFreq(freqs,channel.maxFreq_Hz-gap_Hz*(1-freqTol),noiseAbove))**2
+    leftEdgeNoisePSD = np.abs(getValueAtFreq(freqs,channel.channelMinFreq_Hz+channel.leftGap_Hz*(1-freqTol),noiseBelow))**2
+    rightEdgeNoisePSD = np.abs(getValueAtFreq(freqs,channel.channelMaxFreq_Hz-channel.rightGap_Hz*(1-freqTol),noiseAbove))**2
+    
+    signalBW=channel.signalBW_Hz
     
     slope = (rightEdgeNoisePSD-leftEdgeNoisePSD)/signalBW 
     offset = leftEdgeNoisePSD
@@ -2904,7 +3022,6 @@ def getCurrentSNR_dB(freqs,
 
 def getChannelSNR_dB(ssfm_result_list,
                      channel:channel_class,
-                     signalBW,
                      freqTol=0.05):
     """
     Calculates SNR throughout fiber span for a given channel
@@ -2915,8 +3032,6 @@ def getChannelSNR_dB(ssfm_result_list,
         List of ssfm_result_class objects containing signal info for each fiber.
     channel_list : list[channel_class]
         List of channel_class objects describing the min, center and max freqs of each channel.
-    signalBW : float
-        Frequency bandwidth of the signal inside each channel.
     freqTol : float 
         When computing the noise inside the signal BW, use the PSD evaluated at 
         (1-freqTol) of the distance between the lower freq of the channel and 
@@ -2934,24 +3049,18 @@ def getChannelSNR_dB(ssfm_result_list,
     zvals = unpackZvals(ssfm_result_list)
     timeFreq = ssfm_result_list[0].input_signal.timeFreq
     spectrumMatrix = unpackMatrix(ssfm_result_list,zvals,timeFreq,"spectrum")
-    
     freqs=timeFreq.f+timeFreq.centerFrequency
-    
-    gap_Hz = (channel.channelWidth_Hz-signalBW)/2 #Absolute distance from lower(upper) channel edge to signal lower(upper) edge.
-    
-    assert gap_Hz>0, f"ERROR! The gap from the channel edge to the signal must be positive, but is {gap_Hz}!"
     
     outputArray = np.zeros_like(zvals)*1.0
     
     for i,spectrum in enumerate(spectrumMatrix):
-        outputArray[i] = getCurrentSNR_dB(freqs,spectrum,channel,signalBW,gap_Hz,freqTol=freqTol)
+        outputArray[i] = getCurrentSNR_dB(freqs,spectrum,channel,freqTol=freqTol)
         
     return zvals,outputArray
         
 
 def getFinalSNR_dB(ssfm_result_list,
-                     channel_list:list,
-                     signalBW,
+                     channel_list:list[channel_class],
                      freqTol=0.05):
     """
     Calculates SNR for all channels at output of fiber span
@@ -2962,8 +3071,6 @@ def getFinalSNR_dB(ssfm_result_list,
         List of ssfm_result_class objects containing signal info for each fiber.
     channel_list : list[channel_class]
         List of channel_class objects describing the min, center and max freqs of each channel.
-    signalBW : float
-        Frequency bandwidth of the signal inside each channel.
     freqTol : float 
         When computing the noise inside the signal BW, use the PSD evaluated at 
         (1-freqTol) of the distance between the lower freq of the channel and 
@@ -2982,16 +3089,13 @@ def getFinalSNR_dB(ssfm_result_list,
     
     outputArray = np.zeros(len(channel_list))
     for i, currentChannel in enumerate(channel_list):
-        gap_Hz = (currentChannel.channelWidth_Hz-signalBW)/2 #Absolute distance from lower(upper) channel edge to signal lower(upper) edge.
-
-        outputArray[i]=getCurrentSNR_dB(freqs,finalSpectrum,currentChannel,signalBW,gap_Hz,freqTol=freqTol)
+        outputArray[i]=getCurrentSNR_dB(freqs,finalSpectrum,currentChannel,freqTol=freqTol)
     
     return outputArray
         
 
 def plotFinalSNR_dB(ssfm_result_list,
                      channel_list:list,
-                     signalBW,
                      freqTol=0.05):
     """
     Plots the SNR at the output of a fiber span
@@ -3002,8 +3106,6 @@ def plotFinalSNR_dB(ssfm_result_list,
         List of ssfm_result_class objects containing signal info for each fiber.
     channel_list : list[channel_class]
         List of channel_class objects describing the min, center and max freqs of each channel.
-    signalBW : float
-        Frequency bandwidth of the signal inside each channel.
     freqTol : float 
         When computing the noise inside the signal BW, use the PSD evaluated at 
         (1-freqTol) of the distance between the lower freq of the channel and 
@@ -3014,22 +3116,26 @@ def plotFinalSNR_dB(ssfm_result_list,
     None.
 
     """
+    os.chdir(ssfm_result_list[0].dirs[1])
+    signalCenterFreq_list=np.zeros(len(channel_list))
     
-    centerFreq_list=np.zeros(len(channel_list))
-    
+    fig, ax = plt.subplots(dpi=125)
     for i, channel in enumerate(channel_list):
-        centerFreq_list[i]=channel.centerFreq_Hz/1e12
+        signalCenterFreq_list[i]=channel.signalCenterFreq_Hz/1e12
+        ax.axvline(x=channel.channelMinFreq_Hz/1e12,color='gray',alpha=0.35)
+        ax.axvline(x=channel.channelMaxFreq_Hz/1e12,color='gray',alpha=0.35)
+        
+
     
 
     finalSNR_dB=getFinalSNR_dB(ssfm_result_list,
-                               channel_list,
-                               signalBW,
-                               freqTol=0.05)
+                                   channel_list,
+                                   freqTol)
 
-    os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    
+    
     ax.set_title("Final Nonlinear SNR")
-    ax.plot(centerFreq_list,finalSNR_dB,'.')
+    ax.plot(signalCenterFreq_list,finalSNR_dB,'.')
     ax.set_xlabel('Freq [THz]')
     ax.set_ylabel('$SNR_{NL}$ [dB]')
     ax.grid()
@@ -3060,8 +3166,6 @@ def plotSNRforChannels(ssfm_result_list,
         List of channel_class objects describing the min, center and max freqs of each channel.
     channelNumber_list : list[int]
         List of channel numbers to be plotted.
-    signalBW : float
-        Frequency bandwidth of the signal inside each channel.
     **kwargs : Optional
         Optional keyword arguments to set ylims of plot.
 
@@ -3131,26 +3235,25 @@ if __name__ == "__main__":
     N  = 2**18 #Number of points
     dt = 0.05e-12 #Time resolution [s] 
     
-    centerWavelength = 1550e-9 #laser wl in m  
-    centerFreq_test=wavelengthToFreq(centerWavelength)
+    centerFreq_test=freq_center_Cband_Hz
+    centerWavelength = freqToWavelength(centerFreq_test) #laser wl in m  
+
     
     timeFreq_test=timeFreq_class(N,dt,centerFreq_test)
     
-    beta_list = [-10e-27] #Dispersion in units of s^(entry+2)/m    
+    beta_list = [0,-24e-39] #Dispersion in units of s^(entry+2)/m    
     
     fiber_diameter = 9e-6 #m
     n2_silica=2.2e-20 #m**2/W
     
-    gamma_test = getGammaFromFiberParams(centerWavelength,n2_silica,fiber_diameter)
+    gamma_test = 0#getGammaFromFiberParams(centerWavelength,n2_silica,fiber_diameter)
     
     #  Initialize fibers
-    alpha_test = 0.22/1e3
+    alpha_test =0#0 0.22/1e3
     
-    length_test=100e3
+    length_test=80e3
     spanloss=alpha_test*length_test
     
-    
-    firstSegment = 2e3
     
 
 
@@ -3158,184 +3261,59 @@ if __name__ == "__main__":
                              2**5, 
                              gamma_test,   
                              beta_list,    
-                             alpha_test, 
-                             outputAmplification_dB=spanloss,
-                             noiseFactor_dB=3)
+                             alpha_test)
 
     
     
     fiber_list = [fiber_test] #
     fiber_span = fiber_span_class(fiber_list)
     
-    
-    #Set up a single channel
-    Nchannels = 1
-    channel_index = 0
-    
-    channel_list = [None]*Nchannels
-    channel_spacing_Hz = 120e9
-    
-    channelFreqCenter_Hz = centerFreq_test#freq_min_Cband_Hz+channel_spacing_Hz*(0.5+channel_index)
-    channelFreqMin_Hz    = channelFreqCenter_Hz-channel_spacing_Hz/2
-    channelFreqMax_Hz    = channelFreqCenter_Hz+channel_spacing_Hz/2
-    
-    currentChannel = channel_class(channelFreqCenter_Hz, channelFreqMin_Hz, channelFreqMax_Hz)
-    channel_list[channel_index]=currentChannel
-
-
-    Pmin_dBm = 0
-    Pmax_dBm =  24
-    P_steps  =  50
-    
-    
-    testDuration  =20e-12      
+    #Set up signal
+    testDuration  =10e-12      
     testTimeOffset    = 0                       #Time offset
     testFreqOffset    = 0             #Freq offset from center frequency
     
     testChirp = 0
-    testPulseType='sinc' 
+    testPulseType='gaussian' 
     testOrder = 1
     testNoiseAmplitude = 0
     
-    powlist_dBm=np.linspace(Pmin_dBm,Pmax_dBm,P_steps)
-    
-    SNR_list = np.zeros_like(powlist_dBm)
-    
-    testChannel = 0
-    expName="EDFA_development"
-    
-    for pow_index,P_dBm in enumerate(powlist_dBm):
-        
-        testAmplitude = np.sqrt(dB2lin(P_dBm)/1e3)                    #Amplitude in units of sqrt(W)
+    testAmplitude = np.sqrt(0.5/1e3)                    #Amplitude in units of sqrt(W)
         
     
 
-        testInputSignal = input_signal_class(timeFreq_test, 
-                                              testAmplitude ,
-                                              testDuration,
-                                              testTimeOffset,
-                                              testFreqOffset,                                        
-                                              testChirp,
-                                              testPulseType,
-                                              testOrder,
-                                              testNoiseAmplitude)
+    testInputSignal = input_signal_class(timeFreq_test, 
+                                          testAmplitude ,
+                                          testDuration,
+                                          testTimeOffset,
+                                          testFreqOffset,                                        
+                                          testChirp,
+                                          testPulseType,
+                                          testOrder,
+                                          testNoiseAmplitude)
+    
+    
+
+    expName="ThirdOrderDisp_test"
+    
         
-        #Run SSFM
-        ssfm_result_list = SSFM(fiber_span, 
-                                testInputSignal,
-                                showProgressFlag=True,
-                                experimentName=expName,
-                                FFT_tol=5e-5)
+    
         
-        finalSNR_dB=getFinalSNR_dB(ssfm_result_list,
-                                   channel_list,
-                                   1/testDuration)
+    #Run SSFM
+    ssfm_result_list = SSFM(fiber_span, 
+                            testInputSignal,
+                            showProgressFlag=True,
+                            experimentName=expName,
+                            FFT_tol=5e-5)
         
-        SNR_list[pow_index]=finalSNR_dB
     
     
+    nrange = 2000
+    dB_cutoff=-60
+    
+    plotFirstAndLastSpectrum(ssfm_result_list, nrange, dB_cutoff)
+    plotFirstAndLastPulse(ssfm_result_list, nrange, dB_cutoff)
     
     
-    from scipy.optimize import curve_fit
-    
-    
-    def SNRfunc_dB(P_dBm,a,b):
-        P_lin = dB2lin(P_dBm)
-        return -lin2dB(a/P_lin+b*P_lin**(2))
-    
-    popt, pcov = curve_fit(SNRfunc_dB, powlist_dBm,SNR_list)
-    
-    fig,ax=plt.subplots(dpi=200)
-    ax.plot(powlist_dBm,SNR_list,'.-',label='data',color='C2')
-    ax.plot(powlist_dBm, SNRfunc_dB(powlist_dBm, popt[0], popt[1]), '-',
-         label='Fitted function',color='k')
-    
-    ax.plot(powlist_dBm, SNRfunc_dB(powlist_dBm,popt[0],0), '-',label='Linear term $\propto P$ ',color='C1')
-    ax.plot(powlist_dBm, SNRfunc_dB(powlist_dBm,0,popt[1]), '-',label='Nonlinear term$\propto P^{-2}$ ',color='C0')
-    
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.legend(
-               loc='upper center', 
-               bbox_to_anchor=(0.5, 1.25),
-               ncol=2, 
-               fancybox=True, 
-               shadow=True)
-    
-    ax.set_ylabel('SNR [dB]')
-    ax.set_xlabel('$P_{launch}$ [dBm]',color='C3')
-    ax.grid()
-    ax.set_ylim(0,np.max(SNR_list)*1.3)
-    plt.savefig("SNR_graph.png", bbox_inches='tight', pad_inches=0)
-    plt.show()
-    
-    
-    
-
-
-    
-    
-
-    
-    
-    
-    
-
-    
-    # #Plot pulses
-    # nrange_test_pulse=2000
-    # cutoff_test_pulse=-60
-
-    # #Plot spectrum
-    # nrange_test_spectrum=int(2000)
-    # cutoff_test_spectrum=-60
-    
-    # #plotFirstAndLastPulse(ssfm_result_list,nrange_test_pulse, cutoff_test_pulse)
-    # #plotFirstAndLastSpectrum(ssfm_result_list, nrange_test_spectrum,cutoff_test_spectrum)
-    
-    # # plotEverythingAboutSpectra(ssfm_result_list,
-    # #                                 nrange_test_spectrum, 
-    # #                                 cutoff_test_spectrum)
-    
-    
-    # plotEverythingAboutResult(ssfm_result_list,
-    #                           nrange_test_pulse,
-    #                           cutoff_test_pulse,
-    #                           nrange_test_spectrum,
-    #                           cutoff_test_spectrum,
-    #                           skip_chirp_plot_flag = True
-    #                           )
-    
-    # plotFirstAndLastSpectrum(ssfm_result_list, int(len(testInputSignal.timeFreq.t)*0.3), cutoff_test_spectrum)
-    
-    
-    # plotSNRforChannels(ssfm_result_list,
-    #                      channel_list,
-    #                      [0],
-    #                      1/testDuration) #
-    
-
-                         
-    
-    
-    # plotFinalSNR_dB(ssfm_result_list,
-    #                  channel_list,
-    #                  1/testDuration)
-    
-
-    
-    
-
-    
-    
-    
-    
-    #makeChirpGif(ssfm_result_list,nrange_test_pulse,chirpRange=[-20,20],framerate=30)
-    
-    # waveletTransform(ssfm_result_list[0].input_signal.timeFreq,
-    #                   ssfm_result_list[0].pulseMatrix[0,:], 
-    #                   nrange_test_pulse,
-    #                   nrange_test_spectrum,
-    #                   cutoff_test_pulse )
     
     
