@@ -1051,9 +1051,9 @@ class FiberSpan:
 
 
 
-        self.input_amp_dB=input_amp_dB,
-        self.input_noise_factor_dB=input_noise_factor_dB,
-        self.input_atten_dB = input_atten_dB
+        self.input_amp_dB=float(input_amp_dB)
+        self.input_noise_factor_dB=float(input_noise_factor_dB)
+        self.input_atten_dB = float(input_atten_dB)
 
         if input_filter_field_function == None:
             def no_filter(freq):
@@ -1063,9 +1063,9 @@ class FiberSpan:
             self.input_filter_field_function=input_filter_field_function
 
 
-        self.output_amp_dB = output_amp_dB
-        self.output_noise_factor_dB = output_noise_factor_dB
-        self.output_atten_dB = output_atten_dB
+        self.output_amp_dB = float(output_amp_dB)
+        self.output_noise_factor_dB = float(output_noise_factor_dB)
+        self.output_atten_dB = float(output_atten_dB)
         if output_filter_field_function == None:
             def no_filter(freq):
                 return (1+0j)*np.ones_like(freq)
@@ -1149,6 +1149,62 @@ class FiberLink:
 
         self.fiber_list = fiber_list
         self.number_of_fibers_in_span = len(fiber_list)
+
+
+    def get_total_loss_dB(self):
+
+        loss_so_far_dB = 0.0
+
+        for fiber in self.fiber_list:
+            loss_so_far_dB += (fiber.total_loss_dB
+                               + fiber.input_atten_dB
+                               + fiber.output_atten_dB)
+
+        return loss_so_far_dB
+
+    def get_total_gain_dB(self):
+        gain_so_far_dB = 0.0
+
+        for fiber in self.fiber_list:
+            gain_so_far_dB += fiber.input_amp_dB+fiber.output_amp_dB
+
+        return gain_so_far_dB
+
+
+    def get_total_gainloss_dB(self):
+        return self.get_total_gain_dB()-self.get_total_loss_dB()
+
+
+
+    def get_total_loss_lin(self):
+        return dB_to_lin(self.get_total_loss_dB())
+
+
+    def get_total_gain_lin(self):
+        return dB_to_lin(self.get_total_gain_dB())
+
+
+    def get_total_gainloss_lin(self):
+        return dB_to_lin(self.get_total_gainloss_dB())
+
+
+    def get_total_length(self):
+        length_so_far = 0.0
+
+        for fiber in self.fiber_list:
+            length_so_far += fiber.Length
+
+        return length_so_far
+
+    def get_total_dispersion(self):
+        disp_so_far = np.zeros_like(self.fiber_list[0].beta_list)
+
+        for fiber in self.fiber_list:
+            disp_so_far += fiber.Length*np.array(fiber.beta_list)
+
+        return disp_so_far
+
+
 
     def save_fiber_link(self):
         """
@@ -1560,7 +1616,7 @@ class SSFMResult:
     Attributes:
         input_signal ( InputSignal ): Signal launched into fiber
         fiber ( FiberSpan ): Fiber signal was sent through
-        experimentName ( str ): Name of experiment
+        experiment_name ( str ): Name of experiment
         dirs ( tuple ): Contains directory where current script is located and
                     the directory where output is to be saved
 
@@ -1574,7 +1630,7 @@ class SSFMResult:
         self,
         input_signal: InputSignal,
         fiber: FiberSpan,
-        experimentName: str,
+        experiment_name: str,
         directories: str,
     ):
         """
@@ -1583,13 +1639,13 @@ class SSFMResult:
        Parameters:
             input_signal ( InputSignal ): Signal launched into fiber
             fiber ( FiberSpan ): Fiber signal was sent through
-            experimentName ( str ): Name of experiment
+            experiment_name ( str ): Name of experiment
             directories ( tuple ): Contains directory where current script is
             located and the directory where output is to be saved
         """
         self.input_signal = input_signal
         self.fiber = fiber
-        self.experimentName = experimentName
+        self.experiment_name = experiment_name
         self.dirs = directories
 
         self.pulseMatrix = np.zeros(
@@ -1959,13 +2015,13 @@ def describeInputConfig(
         )
 
 
-def create_output_directory(experimentName: str) -> [(str, str), datetime]:
+def create_output_directory(experiment_name: str) -> [(str, str), datetime]:
     """
     Creates output directory for output (graphs etc.)
 
     Parameters
     ----------
-    experimentName : str
+    experiment_name : str
         String with the name of the current experiment.
 
     Returns
@@ -1985,7 +2041,7 @@ def create_output_directory(experimentName: str) -> [(str, str), datetime]:
     current_dir = ""
     current_time = datetime.now()
 
-    if experimentName == "most_recent_run":
+    if experiment_name == "most_recent_run":
         current_dir = base_dir + "most_recent_run\\"
         overwrite_folder_flag = True
     else:
@@ -1993,7 +2049,7 @@ def create_output_directory(experimentName: str) -> [(str, str), datetime]:
         current_dir = (
             base_dir
             + "Simulation Results\\" +
-            f"{experimentName}\\"
+            f"{experiment_name}\\"
             f"{current_time.year}_{current_time.month}_{current_time.day}_" +
             f"{current_time.hour}_{current_time.minute}_" +
             f"{current_time.second}\\"
@@ -2175,8 +2231,8 @@ def get_noise_PSD(NF_dB: float,
 def SSFM(
     fiber_link: FiberLink,
     input_signal: InputSignal,
-    experimentName: str = "most_recent_run",
-    showProgressFlag: bool = False,
+    experiment_name: str = "most_recent_run",
+    show_progress_flag: bool = False,
     FFT_tol: float = 1e-7,
 ) -> list[SSFMResult]:
     """
@@ -2196,9 +2252,9 @@ def SSFM(
                                 which the signal is propagated
         input_signal (InputSignal): Class holding info about
                                     initial input signal
-        experimentName ="most_recent_run" (str) (optional): Name of folder for
+        experiment_name ="most_recent_run" (str) (optional): Name of folder for
                                                             present simulation.
-        showProgressFlag = False (bool) (optional): Print percentage
+        show_progress_flag = False (bool) (optional): Print percentage
                                                     progress to terminal?
         FFT_tol=1e-7 (float) (optional): Maximum fractional change in signal
                                          energy when doing FFT
@@ -2218,7 +2274,7 @@ def SSFM(
 
     # Create output directory, switch to it and return
     # appropriate paths and current time
-    dirs, current_time = create_output_directory(experimentName)
+    dirs, current_time = create_output_directory(experiment_name)
 
     # Make new folder to hold info about the input signal and fiber span
     base_dir = dirs[0]
@@ -2253,7 +2309,7 @@ def SSFM(
 
         # Initialize arrays to store pulse and spectrum throughout fiber
         ssfm_result = SSFMResult(
-            current_input_signal, fiber, experimentName, dirs
+            current_input_signal, fiber, experiment_name, dirs
         )
 
         newFolderName = "Length_info\\"
@@ -2299,11 +2355,27 @@ def SSFM(
         if fiber.ramanModel != "None":
             NL_function = get_NL_factor_full
 
-        inputAttenuationField_lin = dB_to_lin(fiber.input_atten_dB / 2)
+        inputAttenuationField_lin = np.sqrt(dB_to_lin(fiber.input_atten_dB))
+
+        random_phases_input = np.random.uniform(-pi, pi, len(f))
+        random_phase_factor_input = np.exp(1j * random_phases_input)
+        input_amp_field_factor = 10 ** (fiber.input_amp_dB / 20)
+        input_noise_ASE_array = random_phase_factor_input * np.sqrt(
+            get_noise_PSD(
+                fiber.input_noise_factor_dB,
+                fiber.input_amp_dB,
+                -f + fc,
+                df
+            )
+        )
+
+
+
         outputAttenuationField_lin = 1.0  # temporarily=1 until we reach end
-        # temporary value until we reach fiber end
+
+        # temporary values until we reach fiber end
         noise_ASE_array = 1.0 * np.zeros_like(f)
-        outputAmp_factor = 1.0  # temporary value until we reach fiber end
+        output_amp_field_factor = 1.0
         output_filter_field_array = (1.0+0j)*np.ones_like(f)
 
         # Initialize arrays to store temporal profile
@@ -2313,25 +2385,24 @@ def SSFM(
             current_input_signal.amplitude,
             FFT_tol=FFT_tol,
         )
-        # and spectrum while calculating SSFM
+        # Initialize spectrum and apply attenuation, input amplification, noise
+        # as well as dispersion half-step
         spectrum = (
             get_spectrum_from_pulse(
                 current_input_signal.timeFreq.t,
                 current_input_signal.amplitude,
                 FFT_tol=FFT_tol,
-            )
-            * disp_and_loss_half_step
-            * inputAttenuationField_lin
-        )
+            )* inputAttenuationField_lin*input_amp_field_factor+input_noise_ASE_array
+        )* disp_and_loss_half_step
 
+        #apply input filter function
         spectrum *= fiber.input_filter_field_function(-f+fc)
 
 
         pulse = get_pulse_from_spectrum(
             input_signal.timeFreq.f, spectrum, FFT_tol=FFT_tol)
 
-        # ^Done just above
-        # Apply half dispersion step
+
         #
         # Start loop
         #   Apply full NL step
@@ -2361,10 +2432,10 @@ def SSFM(
             if z_step_index == fiber.numberOfSteps - 1:
                 randomPhases = np.random.uniform(-pi, pi, len(f))
                 randomPhaseFactor = np.exp(1j * randomPhases)
-                outputAttenuationField_lin = dB_to_lin(
-                    fiber.output_atten_dB / 2)
+                outputAttenuationField_lin = np.sqrt(dB_to_lin(
+                    fiber.output_atten_dB))
                 output_filter_field_array = fiber.output_filter_field_function(-f+fc)
-                outputAmp_factor = 10 ** (fiber.output_amp_dB / 20)
+                output_amp_field_factor = 10 ** (fiber.output_amp_dB / 20)
                 noise_ASE_array = randomPhaseFactor * np.sqrt(
                     get_noise_PSD(
                         fiber.output_noise_factor_dB,
@@ -2376,7 +2447,7 @@ def SSFM(
 
             # Apply half dispersion step to spectrum and store results
             ssfm_result.spectrumMatrix[z_step_index + 1, :] = (
-                spectrum * disp_and_loss_half_step * outputAmp_factor
+                spectrum * disp_and_loss_half_step * output_amp_field_factor
                 + noise_ASE_array
             ) * outputAttenuationField_lin*output_filter_field_array
 
@@ -2395,7 +2466,7 @@ def SSFM(
                                             FFT_tol=FFT_tol)
 
             finished = 100 * (z_step_index / fiber.numberOfSteps)
-            if divmod(finished, 10)[0] > updates and showProgressFlag:
+            if divmod(finished, 10)[0] > updates and show_progress_flag:
                 updates += 1
                 print(
                     (f"SSFM progress through fiber number {fiber_index+1} = "
@@ -3211,7 +3282,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
 
     writer = PillowWriter(fps=int(framerate))
     ani.save(
-        f"{ssfm_result_list[0].experimentName}_fps={int(framerate)}.gif",
+        f"{ssfm_result_list[0].experiment_name}_fps={int(framerate)}.gif",
         writer=writer)
 
     os.chdir(ssfm_result_list[0].dirs[0])
@@ -4043,24 +4114,22 @@ if __name__ == "__main__":
 
     timeFreq_test = TimeFreq(N, dt, centerFreq_test)
 
-    # Dispersion in units of s^(entry+2)/m
-    beta_list = [0]
+
 
     fiber_diameter = 9e-6  # m
     n2_silica = 30e-21  # m**2/W
 
-    #
     gamma_test = get_gamma_from_fiber_params(
         centerWavelength,
         n2_silica,
         fiber_diameter)
 
     #  Initialize fibers
-    alpha_test = 0
+    alpha_test = 1.2/1e3 #dB/m
+    beta_list = [-2e-36,4e-56] # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    length_test = 1.2e3 #m
 
     number_of_steps = 2**8
-    testDuration = 5e-9
-    length_test = 1e3
 
     fiber_test = FiberSpan(
         length_test,
@@ -4068,26 +4137,31 @@ if __name__ == "__main__":
         gamma_test,
         beta_list,
         alpha_test,
+        input_amp_dB=10,
+        input_atten_dB=0,
+        output_amp_dB=0,
+        output_atten_dB=0,
         use_self_steepening=True)
 
-    fiber_list = [fiber_test]
+    fiber_list = [fiber_test,fiber_test,fiber_test]
     fiber_link = FiberLink(fiber_list)
+
+
+
 
     # Set up signal
     test_FFT_tol = 1e-3
     testTimeOffset = 0  # Time offset
     testFreqOffset = 15e9  # Freq offset from center frequency
-
     testChirp = 0
-    testPulseType = "sqrt_triangle"
-    testOrder = 1
+    testPulseType = "gaussian"
+    testOrder = 2
     testNoiseAmplitude = 0
-
-    # 2*np.sqrt(np.abs(beta_list[0])/gamma_test/testDuration**2) #np.sqrt(1e-9 /(testDuration))  # Amplitude in units of sqrt(W)
     testAmplitude = 0.25
+    testDuration = 5e-9
 
 
-    testInputSignal = InputSignal(
+    test_input_signal = InputSignal(
         timeFreq_test,
         testAmplitude,
         testDuration,
@@ -4100,38 +4174,39 @@ if __name__ == "__main__":
         FFT_tol=test_FFT_tol
     )
 
-    testInputSignal.amplitude+=get_pulse(timeFreq_test.t,
+    test_input_signal.amplitude+=get_pulse(timeFreq_test.t,
                                          testAmplitude*2,
                                          testDuration*2,
                                          testTimeOffset,
                                          -testFreqOffset,
                                          testChirp,
                                          "square")
-    testInputSignal.update_spectrum()
+    test_input_signal.update_spectrum()
 
     fig,ax=plt.subplots(dpi=300)
-    ax.plot(testInputSignal.timeFreq.t*1e9,get_power(testInputSignal.amplitude))
+    ax.plot(test_input_signal.timeFreq.t*1e9,get_power(test_input_signal.amplitude))
     ax.set_xlim(-5,5)
     plt.show()
 
-    expName = "FWM_test"
+    expName = "test"
 
     # Run SSFM
     ssfm_result_list = SSFM(
         fiber_link,
-        testInputSignal,
-        showProgressFlag=True,
-        experimentName=expName,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=expName,
         FFT_tol=test_FFT_tol
     )
 
 
-    nrange = 4000*4
-    dB_cutoff = -90
+    nrange = 6000*4
+    dB_cutoff = -180
 
-    # plot_everything_about_result(
-    #     ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
+    plot_everything_about_result(
+        ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
 
+    assert 1==2
 
     # plot_pulse_chirp_2D(ssfm_result_list, nrange, dB_cutoff)
     # plot_first_and_last_spectrum(ssfm_result_list, nrange, dB_cutoff)
@@ -4158,9 +4233,8 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(dpi=300)
 
     final_spectrum=ssfm_result_list[-1].spectrumMatrix[-1, :]
-    ax.set_xlim(-2*testDuration*1e9,2*testDuration*1e9)
 
-    for sideband_order in range(1,4):
+    for sideband_order in range(1,5):
 
 
         sideband=extract_spectrum_range(timeFreq_test.f+timeFreq_test.centerFrequency,
@@ -4172,13 +4246,25 @@ if __name__ == "__main__":
         sideband_pulse_power = get_power(get_pulse_from_spectrum(timeFreq_test.f, sideband,FFT_tol=test_FFT_tol))
         sideband_pulse_norm=sideband_pulse_power/np.max(sideband_pulse_power)
 
-        ax.plot(timeFreq_test.t*1e9,sideband_pulse_norm,color=f"C{sideband_order-1}")
-        ax.plot(timeFreq_test.t*1e9,triangle_norm**(sideband_order),'--',color=f"C{sideband_order-1}")
+        ax.plot(timeFreq_test.t*1e9,sideband_pulse_norm,color=f"C{sideband_order-1}",label=f"Extracted sideband n={sideband_order}")
+        ax.plot(timeFreq_test.t*1e9,triangle_norm**(sideband_order),'--',color=f"C{sideband_order-1}",label=f"Triangle^{sideband_order}")
 
 
+    ax.set_xlim(-1*testDuration*1e9,1*testDuration*1e9)
+    ax.set_xlabel('Time [ns]')
+    ax.set_ylabel('Normalized power')
 
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.45),
+        ncol=2,
+        fancybox=True,
+        shadow=True,
+    )
 
-
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.show()
     assert 1==2
 
 
