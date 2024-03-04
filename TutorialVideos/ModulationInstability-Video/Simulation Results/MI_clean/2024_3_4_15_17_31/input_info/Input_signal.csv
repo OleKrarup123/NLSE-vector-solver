@@ -1,0 +1,2 @@
+,Amax_sqrt(W),Pmax_W,duration_s,time_offset_s,freq_offset_Hz,chirp,pulseType,order,noiseAmplitude_sqrt(W)
+0,0.9999999687461855,0.9999999374923719,1e-10,0,0,0,gaussian,1,0.0
