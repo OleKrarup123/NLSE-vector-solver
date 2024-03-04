@@ -1771,7 +1771,7 @@ def describe_sim_parameters(
         scalingfactor = 1e3
         prefix = "k"
     if destination is not None:
-        fig, ax = plt.subplots(dpi=125)
+        fig, ax = plt.subplots(dpi=300)
         ax.set_title(
             (f" Fiber Index = {fiber_index} \nComparison of"
              "characteristic lengths")
@@ -2677,7 +2677,7 @@ def plot_first_and_last_pulse(ssfm_result_list: list[SSFMResult],
     scalingFactor, prefix = get_units(np.max(zvals))
 
     os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
     ax.set_title("Initial pulse and final pulse")
     ax.plot(t, P_initial, label=f"Initial Pulse at z = 0{prefix}m")
     ax.plot(
@@ -2744,7 +2744,7 @@ def plot_pulse_matrix_2D(ssfm_result_list: list[SSFMResult],
 
     # Plot pulse evolution throughout fiber in normalized log scale
     os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
     ax.set_title("Pulse Evolution (dB scale)")
     t_ps = timeFreq.t[Nmin:Nmax] * 1e12
     z = zvals
@@ -2803,6 +2803,7 @@ def plot_pulse_matrix_3D(ssfm_result_list: list[SSFMResult],
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(1, 1, figsize=(
         10, 7), subplot_kw={"projection": "3d"})
+    fig.patch.set_facecolor('white')
     plt.title("Pulse Evolution (dB scale)")
 
     t = timeFreq.t[Nmin:Nmax] * 1e12
@@ -2868,7 +2869,8 @@ def plot_pulse_chirp_2D(ssfm_result_list: list[SSFMResult],
 
     # Plot pulse evolution throughout fiber  in normalized log scale
     os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
     ax.set_title("Pulse Chirp Evolution")
     t = timeFreq.t[Nmin:Nmax] * 1e12
     z = zvals
@@ -2982,7 +2984,8 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
 
     scalingFactor, prefix = get_units(np.max(zvals))
     os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
     ax.set_title("Initial spectrum and final spectrum")
     ax.plot(f, P_initial, label=f"Initial Spectrum at {zvals[0]}{prefix}m")
     ax.plot(
@@ -3043,7 +3046,8 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
 
     # Plot pulse evolution throughout fiber in normalized log scale
     os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
     ax.set_title("Spectrum Evolution (dB scale)")
     #Minus must be included here due to -i*omega*t sign convention
     f = (-timeFreq.f[Nmin:Nmax] + center_freq_Hz) / 1e12
@@ -3102,6 +3106,7 @@ def plot_spectrum_matrix_3D(ssfm_result_list: list[SSFMResult],
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(1, 1, figsize=(
         10, 7), subplot_kw={"projection": "3d"})
+    fig.patch.set_facecolor('white')
     plt.title("Spectrum Evolution (dB scale)")
 
     #Minus must be included here due to -i*omega*t sign convention
@@ -3239,7 +3244,8 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
     )
 
     # Initialize figure
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
     line = ax.add_collection(lc)
     fig.colorbar(line, ax=ax, label="Chirp [GHz]")
 
@@ -3433,7 +3439,8 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     )
 
     os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
     plt.title("Evolution of temporal/spectral widths and centers")
     ax.plot(zvals / scalingFactor_Z, meanTimeArray /
             scalingFactor_pulse, label="Pulse")
@@ -3600,7 +3607,7 @@ def waveletTransform(
 
     Z[Z < 10 ** (dB_cutoff / 10)] = 10 ** (dB_cutoff / 10)
 
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
     ax.set_title("Wavelet transform of final pulse")
     T, F = np.meshgrid(t, 1 / wavelet_durations)
 
@@ -4009,7 +4016,8 @@ def plot_final_SNR_dB(ssfm_result_list: list[SSFMResult],
     os.chdir(ssfm_result_list[0].dirs[1])
     signalCenterFreq_list = np.zeros(len(channel_list))
 
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
     for i, channel in enumerate(channel_list):
         signalCenterFreq_list[i] = channel.signalCenterFreq_Hz / 1e12
         ax.axvline(x=channel.channelMinFreq_Hz /
@@ -4058,7 +4066,8 @@ def plot_SNR_for_channels(
     """
 
     os.chdir(ssfm_result_list[0].dirs[1])
-    fig, ax = plt.subplots(dpi=125)
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
     ax.set_title("Evolution of SNR")
 
     distance_so_far = 0.0
