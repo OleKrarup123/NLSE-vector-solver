@@ -4130,6 +4130,39 @@ if __name__ == "__main__":
     timeFreq_test = TimeFreq(N, dt, centerFreq_test)
 
 
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(timeFreq_test.t/1e-9,'.')
+    ax.plot(timeFreq_test.f/1e9,'.')
+    plt.show()
+
+
+    # Set up signal
+    test_FFT_tol = 1e-3
+    testTimeOffset = 0  # Time offset
+    testFreqOffset = 15e9  # Freq offset from center frequency
+    testChirp = 0
+    testPulseType = "sqrt_triangle"
+    testOrder = 2
+    testNoiseAmplitude = 0
+    testAmplitude = 0.25
+    testDuration = 5e-9
+
+
+    test_input_signal = InputSignal(
+        timeFreq_test,
+        testAmplitude,
+        testDuration,
+        testTimeOffset,
+        testFreqOffset,
+        testChirp,
+        testPulseType,
+        testOrder,
+        testNoiseAmplitude,
+        FFT_tol=test_FFT_tol
+    )
+
+    assert 1==2
+
 
     fiber_diameter = 9e-6  # m
     n2_silica = 30e-21  # m**2/W
