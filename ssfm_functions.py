@@ -17,7 +17,7 @@ Created on Fri Jan 26 14:26:22 2024
 
 
 
-
+from copy import deepcopy
 import os
 from typing import TextIO, Callable
 from datetime import datetime
@@ -46,6 +46,9 @@ FREQ_MIN_C_BAND_HZ = 191.275 * 1e12
 FREQ_MAX_C_BAND_HZ = 196.15 * 1e12
 FREQ_WIDTH_C_BAND_HZ = FREQ_MAX_C_BAND_HZ - FREQ_MIN_C_BAND_HZ
 FREQ_CENTER_C_BAND_HZ = (FREQ_MIN_C_BAND_HZ + FREQ_MAX_C_BAND_HZ) / 2
+
+FREQ_1550_NM_Hz = 193414489032258.06
+FREQ_1310_NM_HZ = 228849204580152.7
 
 
 def get_freq_range_from_time(time_s: npt.NDArray[float]
@@ -649,6 +652,50 @@ def sqrt_triangle(
     return pulse
 
 
+def sqrt_parabola(
+    time_s: npt.NDArray[float],
+    duration_s: float,
+    time_offset_s: float,
+
+) -> npt.NDArray[complex]:
+    """
+    Creates sqrt(parabola(t)) pulse
+
+    Creates sqrt(parabola(t)) pulse, whose absolute square is a parabola
+    function. Such pulses can arise in amplifiers (positive gain) with normal
+    dispersion.
+
+
+    Parameters
+    ----------
+    time_s : npt.NDArray[float]
+        Time range in seconds.
+    duration_s : float
+        Half of the total duration of the sqrt(paraboa(t)) pulse;
+        "roots = +/- duration_s ".
+    time_offset_s : float
+        Time at which the pulse peaks.
+
+
+    Returns
+    -------
+    sqrt_parabola_pulse : npt.NDArray[complex]
+        Sqrt(parabola(t)) pulse in time domain in units of sqrt(W).
+
+    """
+
+
+
+    parabola =((1- ((time_s-time_offset_s)/duration_s)**2))
+
+    parabola[parabola<=0]=0
+
+
+    sqrt_parabola_pulse = np.sqrt(parabola)
+
+    return sqrt_parabola_pulse
+
+
 def noise_ASE(
         time_s: npt.NDArray[float],
         noiseStdev: float
@@ -747,7 +794,7 @@ def get_pulse(
                 duration_s,
                 time_offset_s,
                 order,
-            ) + noise
+            )
         )
 
     elif pulseType.lower() == "sech":
@@ -756,7 +803,7 @@ def get_pulse(
                 time_s,
                 duration_s,
                 time_offset_s,
-            ) + noise
+            )
         )
 
     elif pulseType.lower() == "square":
@@ -765,7 +812,7 @@ def get_pulse(
                 time_s,
                 duration_s,
                 time_offset_s,
-            ) + noise
+            )
         )
 
     elif pulseType.lower() == "sqrt_triangle":
@@ -774,7 +821,16 @@ def get_pulse(
                 time_s,
                 duration_s,
                 time_offset_s,
-            ) + noise
+            )
+        )
+
+    elif pulseType.lower() == "sqrt_parabola":
+        output_pulse = (
+            sqrt_parabola(
+                time_s,
+                duration_s,
+                time_offset_s,
+            )
         )
 
     elif pulseType.lower() == "sinc":
@@ -783,7 +839,7 @@ def get_pulse(
                 time_s,
                 duration_s,
                 time_offset_s,
-            ) + noise
+            )
         )
 
     elif pulseType.lower() == "custom":
@@ -1783,20 +1839,22 @@ def describe_sim_parameters(
         file=destination,
     )
 
-    if fiber.alpha_Np_per_m > 0:
+    if fiber.alpha_Np_per_m == 0.0:
+        L_eff = fiber.Length
 
-        if fiber.alpha_Np_per_m == 0.0:
-            L_eff = fiber.Length
-        else:
-            L_eff = (
-                1 - np.exp(-fiber.alpha_Np_per_m * fiber.Length)
-            ) / fiber.alpha_Np_per_m
-        print(
-            f"  L_eff       \t= {L_eff/scalingfactor:.2e} {prefix}m",
-            file=destination
-        )
+    else :
 
-        length_list = np.append(length_list, L_eff)
+        L_eff = (
+             np.exp(fiber.alpha_Np_per_m * fiber.Length)-1
+        ) / fiber.alpha_Np_per_m
+
+
+    print(
+        f"  L_eff       \t= {L_eff/scalingfactor:.2e} {prefix}m",
+        file=destination
+    )
+
+    length_list = np.append(length_list, L_eff)
     if destination is not None:
         ax.barh("Fiber Length", fiber.Length / scalingfactor, color="C0")
 
@@ -2300,7 +2358,7 @@ def SSFM(
     # Return to main output directory
     os.chdir(current_dir)
 
-    current_input_signal = input_signal
+    current_input_signal = deepcopy(input_signal)
 
     ssfm_result_list = []
 
@@ -2345,7 +2403,7 @@ def SSFM(
         # Pre-calculate effect of dispersion and loss as it's
         # the same everywhere
         disp_and_loss = np.exp(
-            fiber.dz * (1j * dispterm - fiber.alpha_Np_per_m / 2))
+            fiber.dz * (1j * dispterm + fiber.alpha_Np_per_m / 2))
         disp_and_loss_half_step = disp_and_loss ** 0.5
 
         # Precalculate constants for nonlinearity
@@ -3502,6 +3560,7 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     os.chdir(ssfm_result_list[0].dirs[0])
 
 
+#TODO: Make figure dpi a variable argument
 def plot_everything_about_result(
     ssfm_result_list: list[SSFMResult],
     nrange_pulse: int,
@@ -4120,9 +4179,99 @@ if __name__ == "__main__":
 
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
-    Trange = 100e-9
     N = 2 ** 15  # Number of points
-    dt = Trange/N  # Time resolution [s]
+    dt = 100e-15  # Time resolution [s]
+
+    centerFreq_test =FREQ_1550_NM_Hz#FREQ_CENTER_C_BAND_HZ
+    timeFreq_test = TimeFreq(N, dt, centerFreq_test)
+
+     # Set up signal
+    test_FFT_tol = 1e-3
+    test_time_offset = 0  # Time offset
+    test_freq_offset = 0.0  # Freq offset from center frequency
+    test_chirp = 0
+    test_pulse_type = "gaussian"
+    test_order = 1
+    test_noise_amplitude = 0
+    test_amplitude = 0.25
+    test_duration = 12e-12
+
+
+    test_input_signal = InputSignal(
+        timeFreq_test,
+        test_amplitude,
+        test_duration,
+        test_time_offset,
+        test_freq_offset,
+        test_chirp,
+        test_pulse_type,
+        test_order,
+        test_noise_amplitude,
+        FFT_tol=test_FFT_tol
+    )
+
+
+    alpha_test = 1.2/1e3 #dB/m
+    beta_list = [1.66e-26] # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test=4e-3 #1/W/m
+    length_test = 15e3 #m
+    number_of_steps = 2**9
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test)
+
+    fiber_list = [fiber_test]#,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+    exp_name="Parabolic_pulse"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+
+
+
+    nrange = 1500
+    dB_cutoff = -60
+
+    plot_everything_about_result(
+        ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
+
+    make_chirp_gif(ssfm_result_list,
+                        nrange,
+                        chirpRange_GHz = [-40, 40],
+                        framerate = 30)
+
+
+    assert 1==2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    N = 2 ** 15  # Number of points
+    dt = 10e-15  # Time resolution [s]
 
     centerFreq_test = 200e12#FREQ_CENTER_C_BAND_HZ
     centerWavelength = freq_to_wavelength(centerFreq_test)  # laser wl in m
@@ -4270,11 +4419,16 @@ if __name__ == "__main__":
     )
 
 
-    nrange = 6000*4
+    nrange = 1500
     dB_cutoff = -60
 
     plot_everything_about_result(
         ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
+
+    # make_chirp_gif(ssfm_result_list,
+    #                     nrange,
+    #                     chirpRange_GHz = [-20, 20],
+    #                     framerate = 30)
 
     assert 1==2
 
