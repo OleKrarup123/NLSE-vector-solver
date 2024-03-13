@@ -50,6 +50,15 @@ FREQ_CENTER_C_BAND_HZ = (FREQ_MIN_C_BAND_HZ + FREQ_MAX_C_BAND_HZ) / 2
 FREQ_1550_NM_Hz = 193414489032258.06
 FREQ_1310_NM_HZ = 228849204580152.7
 
+PULSE_TYPE_LIST = ["gaussian",
+                   "general_gaussian",
+                   "sech",
+                   "square",
+                   "sqrt_triangle",
+                   "sqrt_parabola",
+                   "sinc",
+                   "raised_cosine",
+                   "custom"]
 
 def get_freq_range_from_time(time_s: npt.NDArray[float]
                              ) -> npt.NDArray[float]:
@@ -452,28 +461,22 @@ def get_energy(
     return energy
 
 
-def gaussian_pulse(
-    time_s: npt.NDArray[float],
-    duration_s: float,
-    time_offset_s: float,
-    order: float,
+
+def general_gaussian_pulse(normalized_time: npt.NDArray[float]
+                           ,order: float
 ) -> npt.NDArray[complex]:
     """
-    Generates a (super) gaussian pulse with the specified power, duration,
-    offset, frequency shift, (order) and chirp.
+    Generates a general gaussian pulse with the specified power, duration,
+    offset, frequency shift, order and chirp.
 
     Parameters
     ----------
-    time_s : npt.NDArray[float]
-        Time range in seconds.
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to time at which the pulse has
+        a value of exp(-0.5)=0.6065... .
 
-    duration_s : float
-       RMS width of Gaussian, i.e. time at which the amplitude is reduced
-       by a factor exp(-0.5) = 0.6065 .
-    time_offset_s : float
-        Time at which the Gaussian peaks.
     order : float
-        Controls shape of pulse as exp(-x**(2*order)) will be approximately
+        Controls shape of pulse as exp(-x**(order)) will be approximately
         square for large values of 'order'.
 
     Returns
@@ -483,56 +486,98 @@ def gaussian_pulse(
 
     """
 
-    assert order > 0, f"Error: Order of gaussian is {order}. Must be >0"
-    pulse = np.exp(-0.5*((time_s - time_offset_s) / (2*duration_s)) ** (2 * order)
-                               )
+    assert order > 0, f"Error: Order of gaussian is {order}. Must be > 0"
 
+    pulse = np.exp(-0.5 * np.abs(normalized_time) ** (order))
 
     return pulse
 
 
-def square_pulse(
-    time_s: npt.NDArray[float],
-    duration_s: float,
-    time_offset_s: float,
-) -> npt.NDArray[complex]:
+def gaussian_pulse(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
+    """
+    Generates a regular gaussian pulse
+
+    Parameters
+    ----------
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to time at which the pulse has
+        a value of exp(-0.5)=0.6065... .
+
+    Returns
+    -------
+    gaussian_pulse: npt.NDArray[complex]
+        Gaussian pulse in time domain with peak normalized to 1.0.
+
+    """
+    order = 2
+    pulse = general_gaussian_pulse(normalized_time, order)
+
+    return pulse
+
+
+def square_pulse(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
     """
     Generates a square pulse with the specified power, duration, offset,
     frequency shift and chirp.
 
     Parameters
     ----------
-    time_s : npt.NDArray[float]
-        Time range in seconds.
-
-    duration_s : float
-        Total duration of the square pulse.
-    time_offset_s : float
-        Time at which the pulse peaks.
-
-
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to half the duration of
+        the square pulse.
 
     Returns
     -------
     square_pulse : npt.NDArray[complex]
-        Square pulse in time domain in units of sqrt(W).
+        Square pulse in time domain with peak normalized to 1.0.
 
     """
-    pulse = gaussian_pulse(
-        time_s,
-        duration_s,
-        time_offset_s,
-        100
-    )
+    order = 200
+    pulse = general_gaussian_pulse(normalized_time,order)
     return pulse
 
 
-def sinc_pulse(
-    time_s: npt.NDArray[float],
-    duration_s: float,
-    time_offset_s: float,
 
-) -> npt.NDArray[complex]:
+def raised_cosine_pulse(normalized_time: npt.NDArray[float],
+                        roll_off_factor: float
+                        ) -> npt.NDArray[complex]:
+    """
+    Creates a raised cosine pulse
+
+    Generates a raised cosine pulse, which is useful as
+    it will have no inter-symbol interference if multiple pulses
+    are spaced "duration_s" apart.
+
+    Parameters
+    ----------
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to time at which the first zero
+        of the sinc function occurs.
+
+    roll_off_factor: float
+        Controls "how similar" the pulse will be to an ideal sinc pulse, and
+        thus the "steepness" of its spectrum. Must be between 0 and 1, where
+        0 yields a sinc pulse with an "infinite" duration and square spectrum.
+        Choosing 1 yields a shorter pulse with a gradual spectrum roll-off.
+
+
+    Returns
+    -------
+    rc_pulse: npt.NDArray[complex]
+        RC pulse in time domain with peak normalized to 1.0.
+
+    """
+
+    t = normalized_time
+    beta = roll_off_factor
+
+    pulse = np.sinc(t) * np.cos(np.pi*beta*t)/(1-(2*beta*t)**2)
+
+
+    return pulse
+
+
+def sinc_pulse(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
     """
     Creates a sinc pulse (sin(pi*x)/(pi*x))
 
@@ -541,38 +586,24 @@ def sinc_pulse(
 
     Parameters
     ----------
-    time_s : npt.NDArray[float]
-        Time range in seconds.
-
-    duration_s : float
-       Time (relative to peak) at which the first zero of the sinc function
-       is reached; 'Half width at first zero'.
-       Note that the full frequency bandwidth of the spectrum (square shape) of
-       a sinc pulse will be BW_Hz = 1/duration_s
-    time_offset_s : float
-        Time at which the pulse peaks.
-
-
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to time at which the first zero
+        of the sinc function occurs.
 
     Returns
     -------
     sinc_pulse: npt.NDArray[complex]
-        Sinc pulse in time domain in units of sqrt(W).
+        Sinc pulse in time domain with peak normalized to 1.0.
 
     """
 
-
-    pulse = np.sinc((time_s - time_offset_s) / (duration_s))
-
+    beta = 0
+    pulse = raised_cosine_pulse(normalized_time,beta)
 
     return pulse
 
 
-def sech_pulse(
-    time_s: npt.NDArray[float],
-    duration_s: float,
-    time_offset_s: float,
-) -> npt.NDArray[complex]:
+def sech_pulse(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
     """
     Creates hyperbolic secant pulse
 
@@ -583,67 +614,47 @@ def sech_pulse(
 
     Parameters
     ----------
-    time_s : npt.NDArray[float]
-        Time range in seconds.
-
-    duration_s : float
-        Characteristic duration of sech pulse. sech(duration_s)=0.648...
-    time_offset_s : float
-        Time at which the pulse peaks.
-
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to characteristic duration of
+        sech pulse. sech(time_s/duration_s)=0.648...
 
     Returns
     -------
     sech_pulse : npt.NDArray[complex]
-        Sech pulse in time domain in units of sqrt(W).
+        Sech pulse in time domain with peak normalized to 1.0.
 
     """
 
-
-
-    pulse = 1/ np.cosh((time_s - time_offset_s) / duration_s)
-
+    pulse = 1/np.cosh(normalized_time)
 
     return pulse
 
 
-
-def sqrt_triangle(
-    time_s: npt.NDArray[float],
-    duration_s: float,
-    time_offset_s: float,
-
-) -> npt.NDArray[complex]:
+def sqrt_triangle(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
     """
     Creates sqrt(triangle(t)) pulse
 
     Creates sqrt(triangle(t)) pulse, whose absolute square is a triangle
     function. Rarely used in practical experiments, but useful for
-    illustrating certain effects,
-    .
+    illustrating certain effects.
+
 
     Parameters
     ----------
-    time_s : npt.NDArray[float]
-        Time range in seconds.
-    duration_s : float
-        Total duration of the sqrt(triangle(t)) pulse; "corner to corner".
-    time_offset_s : float
-        Time at which the pulse peaks.
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to total duration of the
+        sqrt(triangle(t)) pulse; "corner to corner".
 
 
     Returns
     -------
     sqrt_triag_pulse : npt.NDArray[complex]
-        Sqrt(triangle(t)) pulse in time domain in units of sqrt(W).
-
+        Sqrt(triangle(t)) pulse in time domain with peak normalized to 1.0.
     """
 
-
-
-    zero_array  = np.zeros_like(time_s)
-    left_array  = 1+(time_s-time_offset_s)/(duration_s/2)
-    right_array = 1-(time_s-time_offset_s)/(duration_s/2)
+    zero_array  = np.zeros_like(normalized_time)
+    left_array  = 1+2*normalized_time
+    right_array = 1-2*normalized_time
 
     triangle = np.maximum(zero_array,np.minimum(left_array,right_array))
 
@@ -653,11 +664,7 @@ def sqrt_triangle(
 
 
 def sqrt_parabola(
-    time_s: npt.NDArray[float],
-    duration_s: float,
-    time_offset_s: float,
-
-) -> npt.NDArray[complex]:
+    normalized_time: npt.NDArray[float],) -> npt.NDArray[complex]:
     """
     Creates sqrt(parabola(t)) pulse
 
@@ -668,25 +675,21 @@ def sqrt_parabola(
 
     Parameters
     ----------
-    time_s : npt.NDArray[float]
-        Time range in seconds.
-    duration_s : float
-        Half of the total duration of the sqrt(paraboa(t)) pulse;
-        "roots = +/- duration_s ".
-    time_offset_s : float
-        Time at which the pulse peaks.
+    normalized_time : npt.NDArray[float]
+        Time range offset and normalized to half of the total duration of the
+        sqrt(paraboa(t)) pulse; "roots = +/- duration_s ".
 
 
     Returns
     -------
     sqrt_parabola_pulse : npt.NDArray[complex]
-        Sqrt(parabola(t)) pulse in time domain in units of sqrt(W).
+        Sqrt(parabola(t)) pulse in time domain with normalized peak at 1.0.
 
     """
 
 
 
-    parabola =((1- ((time_s-time_offset_s)/duration_s)**2))
+    parabola = 1 - normalized_time**2
 
     parabola[parabola<=0]=0
 
@@ -733,14 +736,16 @@ def noise_ASE(
 
 def get_pulse(
     time_s: npt.NDArray[float],
-    peakAmplitude: float,
     duration_s: float,
     time_offset_s: float,
-    freq_offset_Hz: float,
-    chirp: float,
-    pulseType: str,
-    order: float = 1.0,
+    pulse_type: str,
+    peak_amplitude: float,
+    freq_offset_Hz: float = 0.0,
+    chirp: float = 0.0,
+    order: float = 2.0,
+    roll_off_factor: float = 0.0,
     noiseStdev: float = 0.0,
+    phase_rad: float = 0.0
 ) -> npt.NDArray[complex]:
     """
     Helper function that creates pulse with the specified properties
@@ -754,22 +759,28 @@ def get_pulse(
     ----------
     time_s : npt.NDArray[float]
         Time range in seconds.
-    peakAmplitude : float
-        Peak amplitude in units of sqrt(W)
     duration_s : float
         Characteristic duration of pulse. Meaning varies based on pulse type.
     time_offset_s : float
         Time at which the pulse peaks.
-    freq_offset_Hz : float
-        Center frequency relative to carrier frequency specified in timeFreq.
-    chirp : float
-        Dimensionless parameter controlling the chirp.
-    pulseType : str
+    pulse_type : str
         String that determines which pulse type should be generated.
+    peak_amplitude : float
+        Peak amplitude in units of sqrt(W)
+    freq_offset_Hz : float, optional
+        Center frequency relative to carrier frequency specified in timeFreq.
+        The default is 0.0.
+    chirp : float, optional
+        Dimensionless parameter controlling the chirp.
+        The default is 0.0.
     order : float, optional
-        Order of the Super Gaussian, exp(-x**(2*order)). The default is 1.0.
+        Order of the Super Gaussian, exp(-x**(2*order)).
+        The default is 1.0.
     noiseStdev : float, optional
         Standard deviation of temporal amplitude fluctuations in sqrt(W).
+        The default is 0.0.
+    phase_rad : float, optional
+        Additional phase factor multiplied onto signal.
         The default is 0.0.
 
     Returns
@@ -779,74 +790,57 @@ def get_pulse(
 
     """
 
-    carrier_freq = np.exp(-1j * 2 * pi * (-freq_offset_Hz) * time_s)
+    delta_t_s = time_s-time_offset_s
+
+    normalized_time = delta_t_s/duration_s
+    phase_factor = np.exp(1j*phase_rad)
+    carrier_freq = np.exp(-1j * 2 * pi * (-freq_offset_Hz) * delta_t_s)
     chirp_factor = np.exp(
-        -(1j * chirp) / 2 * ((time_s - time_offset_s) / (duration_s)) ** 2
+        -(1j * chirp) / 2 * normalized_time ** 2
     )
 
     noise = noise_ASE(time_s, noiseStdev)
     output_pulse = 1j*np.zeros_like(time_s)
 
-    if pulseType.lower() in ["gaussian", "gauss"]:
-        output_pulse = (
-            gaussian_pulse(
-                time_s,
-                duration_s,
-                time_offset_s,
-                order,
-            )
-        )
 
-    elif pulseType.lower() == "sech":
-        output_pulse = (
-            sech_pulse(
-                time_s,
-                duration_s,
-                time_offset_s,
-            )
-        )
+    if pulse_type.lower() in ["gaussian", "gauss"]:
+        output_pulse = gaussian_pulse(normalized_time)
 
-    elif pulseType.lower() == "square":
-        output_pulse = (
-            square_pulse(
-                time_s,
-                duration_s,
-                time_offset_s,
-            )
-        )
 
-    elif pulseType.lower() == "sqrt_triangle":
-        output_pulse = (
-            sqrt_triangle(
-                time_s,
-                duration_s,
-                time_offset_s,
-            )
-        )
+    if pulse_type.lower() in ["general_gaussian", "general_gauss"]:
+        output_pulse = general_gaussian_pulse(normalized_time, order )
 
-    elif pulseType.lower() == "sqrt_parabola":
-        output_pulse = (
-            sqrt_parabola(
-                time_s,
-                duration_s,
-                time_offset_s,
-            )
-        )
 
-    elif pulseType.lower() == "sinc":
-        output_pulse = (
-            sinc_pulse(
-                time_s,
-                duration_s,
-                time_offset_s,
-            )
-        )
+    elif pulse_type.lower() == "sech":
+        output_pulse = sech_pulse( normalized_time )
 
-    elif pulseType.lower() == "custom":
+
+    elif pulse_type.lower() == "square":
+        output_pulse = square_pulse(normalized_time)
+
+
+    elif pulse_type.lower() == "sqrt_triangle":
+        output_pulse = sqrt_triangle(normalized_time)
+
+
+    elif pulse_type.lower() == "sqrt_parabola":
+        output_pulse = sqrt_parabola( normalized_time )
+
+
+    elif pulse_type.lower() == "sinc":
+        output_pulse = sinc_pulse(normalized_time)
+
+
+    elif pulse_type.lower() == "raised_cosine":
+        output_pulse = raised_cosine_pulse(normalized_time, roll_off_factor)
+
+
+
+    elif pulse_type.lower() == "custom":
         output_pulse = output_pulse
 
 
-    return peakAmplitude*output_pulse*carrier_freq*chirp_factor+noise
+    return peak_amplitude*output_pulse*carrier_freq*chirp_factor*phase_factor+noise
 
 
 def get_spectrum_from_pulse(
@@ -1368,6 +1362,8 @@ def load_fiber_link(path: str) -> FiberLink:
 
 
 class InputSignal:
+    #TODO: Redo docstring
+
     """
     Class for storing info about signal launched into a fiber link.
 
@@ -1391,32 +1387,38 @@ class InputSignal:
                                 self.amplitude in [sqrt(W)/Hz]
     """
 
+
+
     def __init__(
         self,
-        timeFreq: TimeFreq,
+        time_freq: TimeFreq,
+        duration_s: float,
+        pulse_type: str,
         peak_amplitude: float,
-        duration: float,
-        time_offset_s: float,
-        freq_offset_Hz: float,
-        chirp: float,
-        pulseType: str,
-        order: float = 1.0,
-        noiseAmplitude: float = 0.0,
+        time_offset_s: float=0.0,
+        freq_offset_Hz: float = 0.0,
+        chirp: float = 0.0,
+        order: float = 2.0,
+        roll_off_factor: float = 0.0,
+        noise_stdev_sqrt_W: float = 0.0,
+        phase_rad: float = 0.0,
         showOutput=True,
-        FFT_tol=1e-7,
+        FFT_tol=1e-7
     ):
+        #TODO: Redo docstring
         """
         Constructor for InputSignal
 
         Parameters:
             timeFreq (TimeFreq): Contains info about discretized
                                  time and freq axes
-            peak_amplitude (float): Peak amplitude of signal in [sqrt(W)]
             duration (float): Temporal duration of signal [s]
-            time_offset_s (float): Delay of signal relative to t=0 in [s]
             chirp (float): Chirping factor of sigal
             pulseType (str): Selects pulse type from a set of pre-defined ones.
                              Select "custom" to define the signal manually
+            peak_amplitude (float): Peak amplitude of signal in [sqrt(W)]
+            time_offset_s (float): Delay of signal relative to t=0 in [s]
+
             order (float): For n==1 a and pulseType = "Gaussian" a regular
                            Gaussian pulse is returned. For n>=1 return
                            a super-Gaussian
@@ -1430,27 +1432,48 @@ class InputSignal:
 
         """
 
-        self.duration = duration
-        self.time_offset_s = time_offset_s
-        self.freq_offset_Hz = freq_offset_Hz
-        self.chirp = chirp
-        self.pulseType = pulseType
-        self.order = order
-        self.noiseAmplitude = noiseAmplitude
-        self.timeFreq = timeFreq
+
+        self.time_freq = time_freq
+
+
+        self.duration_s = duration_s
+        self.time_offset_s =time_offset_s
+        self.pulse_type=pulse_type
+        self.peak_amplitude=peak_amplitude
+        self.freq_offset_Hz=freq_offset_Hz
+        self.chirp=chirp
+        self.order=order
+        self.roll_off_factor=roll_off_factor
+        self.noise_stdev_sqrt_W=noise_stdev_sqrt_W
+        self.phase_rad=phase_rad
 
         self.FFT_tol = FFT_tol
 
+
+# time_s: npt.NDArray[float],
+# duration_s: float,
+# time_offset_s: float,
+# pulseType: str,
+# peak_amplitude: float,
+# freq_offset_Hz: float = 0.0,
+# chirp: float = 0.0,
+# order: float = 2.0,
+# roll_off_factor: float = 0.0,
+# noiseStdev: float = 0.0,
+# phase_rad: float = 0.0
+
         self.amplitude = get_pulse(
-            self.timeFreq.t,
-            peak_amplitude,
-            duration,
+            self.time_freq.t,
+            duration_s,
             time_offset_s,
+            pulse_type,
+            peak_amplitude,
             freq_offset_Hz,
             chirp,
-            pulseType,
             order,
-            noiseAmplitude,
+            roll_off_factor,
+            noise_stdev_sqrt_W,
+            phase_rad
         )
 
         self.spectrum = 1j * np.zeros_like(self.amplitude)
@@ -1460,12 +1483,11 @@ class InputSignal:
         self.Amax = 0.0
         self.update_Amax()
 
-        if get_energy(self.timeFreq.t, self.amplitude) == 0.0:
+        if get_energy(self.time_freq.t, self.amplitude) == 0.0:
             self.spectrum = np.copy(self.amplitude)
         else:
             self.update_spectrum()
-        if showOutput:
-            self.describe_input_signal()
+
 
     def update_spectrum(self):
         """
@@ -1479,7 +1501,7 @@ class InputSignal:
 
         """
         self.spectrum = get_spectrum_from_pulse(
-            self.timeFreq.t, self.amplitude, FFT_tol=self.FFT_tol
+            self.time_freq.t, self.amplitude, FFT_tol=self.FFT_tol
         )
         self.update_Pmax()
         self.update_Amax()
@@ -1522,7 +1544,7 @@ class InputSignal:
         print(" ### Input Signal Parameters ###", file=destination)
         print(f"  Pmax \t\t\t\t= {self.Pmax:.3f} W", file=destination)
         print(
-            f"  Duration \t\t\t= {self.duration*1e12:.3f} ps",
+            f"  Duration \t\t\t= {self.duration_s*1e12:.3f} ps",
             file=destination)
         print(
             f"  Time offset \t\t\t= {self.time_offset_s*1e12:.3f} ps",
@@ -1533,34 +1555,40 @@ class InputSignal:
             file=destination
         )
         print(f"  Chirp \t\t\t= {self.chirp:.3f}", file=destination)
-        print(f"  pulseType \t\t\t= {self.pulseType}", file=destination)
+        print(f"  pulseType \t\t\t= {self.pulse_type}", file=destination)
         print(f"  order \t\t\t= {self.order}", file=destination)
         print(
-            f"  noiseAmplitude \t\t= {self.noiseAmplitude:.3f} sqrt(W)",
+            f"  noiseAmplitude \t\t= {self.noise_stdev_sqrt_W:.3f} sqrt(W)",
             file=destination,
         )
 
         print("   ", file=destination)
 
-        scalingFactor, prefix = get_units(self.timeFreq.t[-1])
+        scalingFactor, prefix = get_units(self.time_freq.t[-1])
         fig, ax = plt.subplots(dpi=300)
-        ax.set_title('Input signal in time domain')
-        ax.plot(self.timeFreq.t/scalingFactor, get_power(self.amplitude), '.')
+        ax.set_title(f'Input signal for {self.pulse_type} in time domain')
+        ax.plot(self.time_freq.t/scalingFactor, get_power(self.amplitude), '.')
         ax.set_xlabel(f'Time [{prefix}s]')
         ax.set_ylabel('Power [W]')
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
+        ax.set_xlim(-6*self.duration_s/scalingFactor,6*self.duration_s/scalingFactor)
         plt.show()
 
 
-        scalingFactor, prefix = get_units(self.timeFreq.f[-1])
+        scalingFactor, prefix = get_units(self.time_freq.f[-1])
         fig, ax = plt.subplots(dpi=300)
-        ax.set_title('Input signal in freq domain')
-        ax.plot(self.timeFreq.f/scalingFactor, get_power(self.spectrum), '.')
+        ax.set_title(f'Input signal for {self.pulse_type} in freq domain')
+        ax.plot(self.time_freq.f/scalingFactor, get_power(self.spectrum), '.')
         ax.set_xlabel(f'Freq [{prefix}Hz]')
         ax.set_ylabel('Energy dens. [J/Hz]')
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
+        ax.set_yscale('log')
+        ax.set_xlim(-6/self.duration_s/scalingFactor,6/self.duration_s/scalingFactor)
+        max_power = np.max(get_power(self.spectrum))
+        ax.set_ylim(1e-12*max_power ,2*max_power )
+
         plt.show()
 
     def saveInputSignal(self):
@@ -1571,50 +1599,56 @@ class InputSignal:
         Parameters:
             self
         """
-        # Initialize dataframe
-        signal_df = pd.DataFrame(
-            columns=[
-                "Amax_sqrt(W)",
-                "Pmax_W",
-                "duration_s",
-                "time_offset_s",
-                "freq_offset_Hz",
-                "chirp",
-                "pulseType",
-                "order",
-                "noiseAmplitude_sqrt(W)",
-            ]
-        )
 
-        # Fill it with values used for generating input signal
-        signal_df.loc[len(signal_df.index)] = [
-            self.Amax,
-            self.Pmax,
-            self.duration,
-            self.time_offset_s,
-            self.freq_offset_Hz,
-            self.chirp,
-            self.pulseType,
-            self.order,
-            self.noiseAmplitude,
-        ]
-        # Export dataframe to .csv file
-        signal_df.to_csv("Input_signal.csv")
+        self.time_freq.saveTimeFreq()
 
-        # Also export timeFreq
-        self.timeFreq.saveTimeFreq()
-
-        if self.pulseType == "custom":
+        if self.pulse_type == "custom":
             custom_input_df = pd.DataFrame(
                 columns=["time_s", "amplitude_sqrt_W_real",
                          "amplitude_sqrt_W_imag"]
             )
 
-            custom_input_df["time_s"] = self.timeFreq.t
+            custom_input_df["time_s"] = self.time_freq.t
             custom_input_df["amplitude_sqrt_W_real"] = np.real(self.amplitude)
             custom_input_df["amplitude_sqrt_W_imag"] = np.imag(self.amplitude)
 
             custom_input_df.to_csv("Custom_input_signal.csv")
+
+        else:
+            # Initialize dataframe
+            signal_df = pd.DataFrame(
+                columns=[
+                    "duration_s",
+                    "time_offset_s",
+                    "pulse_type",
+                    "peak_amplitude",
+                    "freq_offset_Hz",
+                    "chirp",
+                    "order"
+                    "roll_off_factor",
+                    "noise_stdev_sqrt_W",
+                    "phase_rad",
+                ]
+            )
+
+            # Fill it with values used for generating input signal
+            signal_df.loc[len(signal_df.index)] = [
+                self.duration_s_s,
+                self.time_offset_s,
+                self.pulse_type,
+                self.peak_amplitude,
+                self.freq_offset_Hz,
+                self.chirp,
+                self.order,
+                self.roll_off_factor,
+                self.noise_stdev_sqrt_W,
+                self.phase_rad
+            ]
+            # Export dataframe to .csv file
+            signal_df.to_csv("Input_signal.csv")
+
+
+
 
 
 def load_input_signal(path: str) -> InputSignal:
@@ -4182,313 +4216,74 @@ if __name__ == "__main__":
     N = 2 ** 15  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    centerFreq_test =FREQ_1550_NM_Hz#FREQ_CENTER_C_BAND_HZ
-    timeFreq_test = TimeFreq(N, dt, centerFreq_test)
+    center_freq_test =FREQ_1550_NM_Hz#FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(N, dt, center_freq_test)
 
      # Set up signal
     test_FFT_tol = 1e-3
-    test_time_offset = 0  # Time offset
-    test_freq_offset = 0.0  # Freq offset from center frequency
-    test_chirp = 0
+    test_peak_amplitude = 1.0
     test_pulse_type = "gaussian"
-    test_order = 1
-    test_noise_amplitude = 0
-    test_amplitude = 0.25
-    test_duration = 12e-12
+    test_peak_amplitude = 0.25
+    test_duration_s = 12e-12
 
 
-    test_input_signal = InputSignal(
-        timeFreq_test,
-        test_amplitude,
-        test_duration,
-        test_time_offset,
-        test_freq_offset,
-        test_chirp,
-        test_pulse_type,
-        test_order,
-        test_noise_amplitude,
-        FFT_tol=test_FFT_tol
-    )
+    for pulse_type in PULSE_TYPE_LIST:
+        test_input_signal = InputSignal(time_freq_test,
+                                        test_duration_s,
+                                        pulse_type,
+                                        test_peak_amplitude,
+                                        order=4,
+                                        roll_off_factor=0.25,
+                                        FFT_tol = test_FFT_tol)
 
 
-    alpha_test = 1.2/1e3 #dB/m
-    beta_list = [1.66e-26] # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    gamma_test=4e-3 #1/W/m
-    length_test = 15e3 #m
-    number_of_steps = 2**9
 
-    fiber_test = FiberSpan(
-        length_test,
-        number_of_steps,
-        gamma_test,
-        beta_list,
-        alpha_test)
+    # alpha_test = 1.2/1e3 #dB/m
+    # beta_list = [1.66e-26] # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    # gamma_test=4e-3 #1/W/m
+    # length_test = 15e3 #m
+    # number_of_steps = 2**9
 
-    fiber_list = [fiber_test]#,fiber_test_2
-    fiber_link = FiberLink(fiber_list)
+    # fiber_test = FiberSpan(
+    #     length_test,
+    #     number_of_steps,
+    #     gamma_test,
+    #     beta_list,
+    #     alpha_test)
 
-    exp_name="Parabolic_pulse"
-    # Run SSFM
-    ssfm_result_list = SSFM(
-        fiber_link,
-        test_input_signal,
-        show_progress_flag=True,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
-    )
+    # fiber_list = [fiber_test]#,fiber_test_2
+    # fiber_link = FiberLink(fiber_list)
 
+    # exp_name="Parabolic_pulse"
+    # # Run SSFM
+    # ssfm_result_list = SSFM(
+    #     fiber_link,
+    #     test_input_signal,
+    #     show_progress_flag=True,
+    #     experiment_name=exp_name,
+    #     FFT_tol=test_FFT_tol
+    # )
 
 
-    nrange = 1500
-    dB_cutoff = -60
 
-    plot_everything_about_result(
-        ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
+    # nrange = 1500
+    # dB_cutoff = -60
 
-    make_chirp_gif(ssfm_result_list,
-                        nrange,
-                        chirpRange_GHz = [-40, 40],
-                        framerate = 30)
-
-
-    assert 1==2
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    N = 2 ** 15  # Number of points
-    dt = 10e-15  # Time resolution [s]
-
-    centerFreq_test = 200e12#FREQ_CENTER_C_BAND_HZ
-    centerWavelength = freq_to_wavelength(centerFreq_test)  # laser wl in m
-
-    timeFreq_test = TimeFreq(N, dt, centerFreq_test)
-
-
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(timeFreq_test.t/1e-9,'.')
-    ax.plot(timeFreq_test.f/1e9,'.')
-    plt.show()
-
-
-    # Set up signal
-    test_FFT_tol = 1e-3
-    testTimeOffset = 0  # Time offset
-    testFreqOffset = 15e9  # Freq offset from center frequency
-    testChirp = 0
-    testPulseType = "sqrt_triangle"
-    testOrder = 2
-    testNoiseAmplitude = 0
-    testAmplitude = 0.25
-    testDuration = 5e-9
-
-
-    test_input_signal = InputSignal(
-        timeFreq_test,
-        testAmplitude,
-        testDuration,
-        testTimeOffset,
-        testFreqOffset,
-        testChirp,
-        testPulseType,
-        testOrder,
-        testNoiseAmplitude,
-        FFT_tol=test_FFT_tol
-    )
-
-    assert 1==2
-
-
-    fiber_diameter = 9e-6  # m
-    n2_silica = 30e-21  # m**2/W
-
-    gamma_test = get_gamma_from_fiber_params(
-        centerWavelength,
-        n2_silica,
-        fiber_diameter)
-
-    #  Initialize fibers
-    alpha_test = 1.2/1e3 #dB/m
-    beta_list = [-2e-36,4e-56] # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    length_test = 0.4e3 #m
-
-    number_of_steps = 2**8
-
-    def input_filter_test(freq):
-        return square_filter_power(freq, 200e12+(3-0.5)*2*15e9, 5e9)
-
-    fiber_test = FiberSpan(
-        length_test,
-        number_of_steps,
-        gamma_test,
-        beta_list,
-        alpha_test,
-        input_filter_power_function=None,#input_filter_test,
-        input_amp_dB=10,
-        input_atten_dB=0,
-        output_amp_dB=0,
-        output_atten_dB=0,
-        output_filter_power_function=input_filter_test,
-        use_self_steepening=True)
-
-    def input_filter_test_2(freq):
-        return gaussian_filter_power(freq, 200e12-15e9, 5e9)
-
-    fiber_test_2 = FiberSpan(
-        length_test,
-        number_of_steps,
-        gamma_test,
-        beta_list,
-        alpha_test,
-        input_filter_power_function=None,#input_filter_test,
-        input_amp_dB=10,
-        input_atten_dB=0,
-        output_amp_dB=0,
-        output_atten_dB=0,
-        output_filter_power_function=input_filter_test_2,
-        use_self_steepening=True)
-
-    fiber_list = [fiber_test]#,fiber_test_2
-    fiber_link = FiberLink(fiber_list)
-
-
-
-
-    # Set up signal
-    test_FFT_tol = 1e-3
-    testTimeOffset = 0  # Time offset
-    testFreqOffset = 15e9  # Freq offset from center frequency
-    testChirp = 0
-    testPulseType = "sqrt_triangle"
-    testOrder = 2
-    testNoiseAmplitude = 0
-    testAmplitude = 0.25
-    testDuration = 5e-9
-
-
-    test_input_signal = InputSignal(
-        timeFreq_test,
-        testAmplitude,
-        testDuration,
-        testTimeOffset,
-        testFreqOffset,
-        testChirp,
-        testPulseType,
-        testOrder,
-        testNoiseAmplitude,
-        FFT_tol=test_FFT_tol
-    )
-
-    test_input_signal.amplitude+=get_pulse(timeFreq_test.t,
-                                         testAmplitude*2,
-                                         testDuration*4,
-                                         testTimeOffset,
-                                         -testFreqOffset,
-                                         testChirp,
-                                         "square")
-    test_input_signal.update_spectrum()
-
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(test_input_signal.timeFreq.t*1e9,get_power(test_input_signal.amplitude))
-    ax.set_xlim(-5,5)
-    plt.show()
-
-    expName = "test"
-
-    # Run SSFM
-    ssfm_result_list = SSFM(
-        fiber_link,
-        test_input_signal,
-        show_progress_flag=True,
-        experiment_name=expName,
-        FFT_tol=test_FFT_tol
-    )
-
-
-    nrange = 1500
-    dB_cutoff = -60
-
-    plot_everything_about_result(
-        ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
+    # plot_everything_about_result(
+    #     ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
 
     # make_chirp_gif(ssfm_result_list,
     #                     nrange,
-    #                     chirpRange_GHz = [-20, 20],
+    #                     chirpRange_GHz = [-40, 40],
     #                     framerate = 30)
 
+
     assert 1==2
 
-    # plot_pulse_chirp_2D(ssfm_result_list, nrange, dB_cutoff)
-    # plot_first_and_last_spectrum(ssfm_result_list, nrange, dB_cutoff)
-    plot_first_and_last_pulse(ssfm_result_list, nrange, dB_cutoff)
-    plot_first_and_last_spectrum(ssfm_result_list, nrange, dB_cutoff)
-
-
-    triangle_power = get_power(get_pulse(
-        timeFreq_test.t,
-        testAmplitude,
-        testDuration,
-        testTimeOffset,
-        testFreqOffset,
-        testChirp,
-        testPulseType,
-        testOrder,
-        testNoiseAmplitude
-    ))
-
-    triangle_norm = triangle_power/np.max(triangle_power)
 
 
 
-    fig, ax = plt.subplots(dpi=300)
-
-    final_spectrum=ssfm_result_list[-1].spectrumMatrix[-1, :]
-
-    for sideband_order in range(1,5):
 
 
-        sideband=extract_spectrum_range(timeFreq_test.f+timeFreq_test.centerFrequency,
-                                        final_spectrum,
-                                        timeFreq_test.centerFrequency+(sideband_order-1)*2*testFreqOffset+3e9,
-                                        timeFreq_test.centerFrequency+(sideband_order)*2*testFreqOffset-3e9)
-
-
-        sideband_pulse_power = get_power(get_pulse_from_spectrum(timeFreq_test.f, sideband,FFT_tol=test_FFT_tol))
-        sideband_pulse_norm=sideband_pulse_power/np.max(sideband_pulse_power)
-
-        ax.plot(timeFreq_test.t*1e9,sideband_pulse_norm,color=f"C{sideband_order-1}",label=f"Extracted sideband n={sideband_order}")
-        ax.plot(timeFreq_test.t*1e9,triangle_norm**(sideband_order),'--',color=f"C{sideband_order-1}",label=f"Triangle^{sideband_order}")
-
-
-    ax.set_xlim(-1*testDuration*1e9,1*testDuration*1e9)
-    ax.set_xlabel('Time [ns]')
-    ax.set_ylabel('Normalized power')
-
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.45),
-        ncol=2,
-        fancybox=True,
-        shadow=True,
-    )
-
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    plt.show()
-    assert 1==2
 
 
