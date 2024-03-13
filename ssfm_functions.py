@@ -58,6 +58,7 @@ PULSE_TYPE_LIST = ["gaussian",
                    "sqrt_parabola",
                    "sinc",
                    "raised_cosine",
+                   "CW",
                    "custom"]
 
 def get_freq_range_from_time(time_s: npt.NDArray[float]
@@ -834,7 +835,8 @@ def get_pulse(
     elif pulse_type.lower() == "raised_cosine":
         output_pulse = raised_cosine_pulse(normalized_time, roll_off_factor)
 
-
+    elif pulse_type.lower() == "cw":
+        output_pulse = (1+0j)*np.ones_like(normalized_time)
 
     elif pulse_type.lower() == "custom":
         output_pulse = output_pulse
@@ -1624,16 +1626,16 @@ class InputSignal:
                     "peak_amplitude",
                     "freq_offset_Hz",
                     "chirp",
-                    "order"
+                    "order",
                     "roll_off_factor",
                     "noise_stdev_sqrt_W",
-                    "phase_rad",
+                    "phase_rad"
                 ]
             )
 
-            # Fill it with values used for generating input signal
-            signal_df.loc[len(signal_df.index)] = [
-                self.duration_s_s,
+
+            pulse_data=[
+                self.duration_s,
                 self.time_offset_s,
                 self.pulse_type,
                 self.peak_amplitude,
@@ -1644,6 +1646,9 @@ class InputSignal:
                 self.noise_stdev_sqrt_W,
                 self.phase_rad
             ]
+
+            # Fill it with values used for generating input signal
+            signal_df.loc[-1] = pulse_data
             # Export dataframe to .csv file
             signal_df.to_csv("Input_signal.csv")
 
@@ -1745,7 +1750,7 @@ class SSFMResult:
         self.dirs = directories
 
         self.pulseMatrix = np.zeros(
-            (len(fiber.z_array), input_signal.timeFreq.number_of_points)
+            (len(fiber.z_array), input_signal.time_freq.number_of_points)
         ) * (1 + 0j)
         self.spectrumMatrix = np.copy(self.pulseMatrix)
 
@@ -2364,11 +2369,11 @@ def SSFM(
     """
     print("########### Initializing SSFM!!! ###########")
 
-    t = input_signal.timeFreq.t
-    # dt = input_signal.timeFreq.time_step
-    f = input_signal.timeFreq.f
-    df = input_signal.timeFreq.freq_step
-    fc = input_signal.timeFreq.centerFrequency
+    t = input_signal.time_freq.t
+    # dt = input_signal.time_freq.time_step
+    f = input_signal.time_freq.f
+    df = input_signal.time_freq.freq_step
+    fc = input_signal.time_freq.centerFrequency
 
     # Create output directory, switch to it and return
     # appropriate paths and current time
@@ -2426,7 +2431,7 @@ def SSFM(
         os.chdir(current_dir)
 
         # Pre-calculate dispersion term
-        dispterm = np.zeros_like(input_signal.timeFreq.f) * 1.0
+        dispterm = np.zeros_like(input_signal.time_freq.f) * 1.0
         for idx, beta_n in enumerate(fiber.beta_list):
             n = idx + 2  # Note: zeroth entry in beta_list is beta2
             #Minus must be included for f due to -i*omega*t sign convention
@@ -2479,7 +2484,7 @@ def SSFM(
         # Initialize arrays to store temporal profile
         initial_pulse = np.copy(current_input_signal.amplitude)
         initial_spectrum = get_spectrum_from_pulse(
-            current_input_signal.timeFreq.t,
+            current_input_signal.time_freq.t,
             current_input_signal.amplitude,
             FFT_tol=FFT_tol,
         )
@@ -2487,7 +2492,7 @@ def SSFM(
         # as well as dispersion half-step
         spectrum = (
             get_spectrum_from_pulse(
-                current_input_signal.timeFreq.t,
+                current_input_signal.time_freq.t,
                 current_input_signal.amplitude,
                 FFT_tol=FFT_tol,
             )* inputAttenuationField_lin*input_amp_field_factor+input_noise_ASE_array
@@ -2498,7 +2503,7 @@ def SSFM(
 
 
         pulse = get_pulse_from_spectrum(
-            input_signal.timeFreq.f, spectrum, FFT_tol=FFT_tol)
+            input_signal.time_freq.f, spectrum, FFT_tol=FFT_tol)
 
 
         #
@@ -2514,7 +2519,7 @@ def SSFM(
         for z_step_index in range(fiber.numberOfSteps):
 
             # Apply nonlinearity
-            pulse *= NL_function(fiber, input_signal.timeFreq, pulse, fiber.dz)
+            pulse *= NL_function(fiber, input_signal.time_freq, pulse, fiber.dz)
 
 
             # Go to spectral domain and apply disp and loss
@@ -2682,7 +2687,7 @@ def unpack_matrix(ssfm_result_list: list[SSFMResult],
         npt.NDArray: Array of size (n_z_steps,n_time_steps) describing pulse amplitude or spectrum for whole fiber span.
 
     """
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
     number_of_fibers = len(ssfm_result_list)
 
     # print(f"number_of_fibers = {number_of_fibers}")
@@ -2751,7 +2756,7 @@ def plot_first_and_last_pulse(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
 
     Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
@@ -2822,7 +2827,7 @@ def plot_pulse_matrix_2D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
 
     Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
@@ -2880,7 +2885,7 @@ def plot_pulse_matrix_3D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
 
     Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
@@ -2948,7 +2953,7 @@ def plot_pulse_chirp_2D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
 
     Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
@@ -3054,7 +3059,7 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
     center_freq_Hz = timeFreq.centerFrequency
     Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
@@ -3125,7 +3130,7 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
     zvals = unpack_Zvals(ssfm_result_list)
     matrix = unpack_matrix(ssfm_result_list, zvals, "spectrum")
 
@@ -3183,7 +3188,7 @@ def plot_spectrum_matrix_3D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
     zvals = unpack_Zvals(ssfm_result_list)
     matrix = unpack_matrix(ssfm_result_list, zvals, "spectrum")
 
@@ -3301,7 +3306,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
 
     print(f"The .gif animation will be saved in {os.getcwd()}")
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
     zvals = unpack_Zvals(ssfm_result_list)
     matrix = unpack_matrix(ssfm_result_list, zvals, "pulse")
     scalingFactor, letter = get_units(np.max(zvals))
@@ -3495,7 +3500,7 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
     center_freq_Hz = timeFreq.centerFrequency
     zvals = unpack_Zvals(ssfm_result_list)
 
@@ -4029,7 +4034,7 @@ def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
     """
 
     zvals = unpack_Zvals(ssfm_result_list)
-    timeFreq = ssfm_result_list[0].input_signal.timeFreq
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
     spectrumMatrix = unpack_matrix(
         ssfm_result_list,
         zvals,
@@ -4070,8 +4075,8 @@ def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
     """
 
     freqs = (
-        ssfm_result_list[0].input_signal.timeFreq.f
-        + ssfm_result_list[0].input_signal.timeFreq.centerFrequency
+        ssfm_result_list[0].input_signal.time_freq.f
+        + ssfm_result_list[0].input_signal.time_freq.centerFrequency
     )
     finalSpectrum = ssfm_result_list[-1].spectrumMatrix[-1, :]
 
@@ -4227,6 +4232,24 @@ if __name__ == "__main__":
     test_duration_s = 12e-12
 
 
+    alpha_test = -0.22/1e3 #dB/m
+    beta_list = [-1.66e-26] # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test=1e-3 #1/W/m
+    length_test = 15e3 #m
+    number_of_steps = 2**6
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test)
+
+    fiber_list = [fiber_test]#,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+
+
     for pulse_type in PULSE_TYPE_LIST:
         test_input_signal = InputSignal(time_freq_test,
                                         test_duration_s,
@@ -4235,42 +4258,28 @@ if __name__ == "__main__":
                                         order=4,
                                         roll_off_factor=0.25,
                                         FFT_tol = test_FFT_tol)
+        exp_name=f"pulse_test_{pulse_type}"
+        # Run SSFM
+        ssfm_result_list = SSFM(
+            fiber_link,
+            test_input_signal,
+            show_progress_flag=True,
+            experiment_name=exp_name,
+            FFT_tol=test_FFT_tol
+        )
+        nrange = 1500
+        dB_cutoff = -60
+
+        plot_everything_about_result(
+            ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
 
 
 
-    # alpha_test = 1.2/1e3 #dB/m
-    # beta_list = [1.66e-26] # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    # gamma_test=4e-3 #1/W/m
-    # length_test = 15e3 #m
-    # number_of_steps = 2**9
-
-    # fiber_test = FiberSpan(
-    #     length_test,
-    #     number_of_steps,
-    #     gamma_test,
-    #     beta_list,
-    #     alpha_test)
-
-    # fiber_list = [fiber_test]#,fiber_test_2
-    # fiber_link = FiberLink(fiber_list)
-
-    # exp_name="Parabolic_pulse"
-    # # Run SSFM
-    # ssfm_result_list = SSFM(
-    #     fiber_link,
-    #     test_input_signal,
-    #     show_progress_flag=True,
-    #     experiment_name=exp_name,
-    #     FFT_tol=test_FFT_tol
-    # )
 
 
 
-    # nrange = 1500
-    # dB_cutoff = -60
 
-    # plot_everything_about_result(
-    #     ssfm_result_list, nrange, dB_cutoff, nrange, dB_cutoff)
+
 
     # make_chirp_gif(ssfm_result_list,
     #                     nrange,
