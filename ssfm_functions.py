@@ -293,7 +293,8 @@ class TimeFreq:
     def __init__(self,
                  number_of_points: int,
                  time_step_s: float,
-                 center_frequency_Hz: float):
+                 center_frequency_Hz: float,
+                 describe_time_freq_flag = True):
         """
 
         Constructor for the TimeFreq class.
@@ -307,6 +308,9 @@ class TimeFreq:
             Duration of each time step.
         center_frequency_Hz : float
             Carrier frequency of the spectrum.
+        describe_time_freq_flag : bool, optional
+            Flag to toggle if description of TimeFreq instance should
+            be printed to file/terminal. The default is True
 
         Returns
         -------
@@ -333,7 +337,8 @@ class TimeFreq:
         f"{np.min(self.center_frequency_Hz+self.f)/1e9:.3f}GHz is below 0. "
         "Consider increasing the center frequency!"
 
-        self.describe_config()
+        if describe_time_freq_flag:
+            self.describe_config()
 
     def describe_config(self,
                         destination=None):
@@ -1092,7 +1097,8 @@ class FiberSpan:
         output_amp_dB: float = 0.0,
         output_noise_factor_dB: float = -1e3,
         output_atten_dB: float = 0.0,
-        output_filter_power_function=None
+        output_filter_power_function=None,
+        describe_fiber_flag = True
     ):
         """
         Constructor for FiberSpan
@@ -1135,6 +1141,9 @@ class FiberSpan:
             Function describing spectrum of a filter to be applied to the
             power at the fiber output. The default is None, which simply
             multiplies the entire spectrum by 1.0.
+        describe_fiber_flag : Bool, optional
+            Toggles whether to print description of fiber.
+            The default is True.
 
         Returns
         -------
@@ -1215,7 +1224,8 @@ class FiberSpan:
                               +alpha_dB_per_m * self.Length
                               +self.output_amp_dB+self.output_atten_dB)
 
-        self.describe_fiber()
+        if describe_fiber_flag:
+            self.describe_fiber()
 
     def describe_fiber(self, destination=None):
         """
@@ -1476,8 +1486,8 @@ class InputSignal:
         roll_off_factor: float = 0.0,
         noise_stdev_sqrt_W: float = 0.0,
         phase_rad: float = 0.0,
-        showOutput=True,
-        FFT_tol=1e-7
+        FFT_tol=1e-7,
+        describe_input_signal_flag = True
     ):
         # TODO: Redo docstring
         """
@@ -1500,11 +1510,11 @@ class InputSignal:
                            a super-Gaussian
             noiseAmplitude (float): Amplitude of added white
                                     noise in units of [sqrt(W)].
-            showOutput=True (bool) (optional): Flag to determine if
-                                               fiber characteristics
-                                               should be printed
+
             FFT_tol=1e-7 (float) (optional): Maximum fractional change in
                                              signal energy when doing FFT
+            describe_input_signal_flag =True (bool) (optional): Flag to
+                determine if fiber characteristics should be printed
 
         """
 
@@ -1552,6 +1562,10 @@ class InputSignal:
         else:
             self.update_spectrum()
 
+        if describe_input_signal_flag:
+            self.describe_input_signal()
+
+
     def update_spectrum(self):
         """
         Updates the spectrum. Useful if the time domain signal is altered, for
@@ -1568,7 +1582,6 @@ class InputSignal:
         )
         self.update_Pmax()
         self.update_Amax()
-        self.describe_input_signal()
 
     def update_Pmax(self):
         """
@@ -1769,7 +1782,7 @@ def load_input_signal(path: str) -> InputSignal:
         roll_off_factor,
         noise_stdev_sqrt_W,
         phase_rad,
-        showOutput=True,
+        describe_input_signal_flag=True,
         FFT_tol = FFT_tol
     )
 
@@ -2499,10 +2512,11 @@ def SSFM(
 
         # TODO: Decide if this should be re-enabled
         #Print simulation info to both terminal and .txt file in output folder
-        describeInputConfig(current_time,
-                            fiber,
-                            current_input_signal,
-                            fiber_index)
+        if show_progress_flag:
+            describeInputConfig(current_time,
+                                fiber,
+                                current_input_signal,
+                                fiber_index)
 
         # Return to main output directory
         os.chdir(current_dir)
@@ -3889,6 +3903,356 @@ def freq_BW_to_wavelength_BW(freq_Hz: float, freqBW_Hz: float) -> float:
     return LIGHTSPEED_M_PER_S * freqBW_Hz / freq_Hz ** 2
 
 
+
+def compare_field_powers(field_1: npt.NDArray[complex],
+                   field_2: npt.NDArray[complex])-> npt.NDArray[float]:
+    """
+    Computes difference between two fields normalized to total local power.
+
+    Parameters
+    ----------
+    field_1 : npt.NDArray[complex]
+        First field in time or frequency domain.
+    field_2 : npt.NDArray[complex]
+        Second field in time or frequency domain.
+
+    Returns
+    -------
+    power_ratio : np.array[float]
+        power_ratio=power(field_1-field_2)/(power(field_1)+power(field_2)).
+
+        A local value of -1 means that field_2>>field_1
+        A local value of 0 means that field_2==field_1
+        A local value of 1 means that field_2<<field_1
+    """
+
+
+
+    assert len(field_1)==len(field_2), f"ERROR: {len(field_1) =} but "
+    f"{len(field_2)}"
+
+    power_1 = get_power(field_1)
+    power_2 = get_power(field_2)
+    total_power = power_1+power_2
+
+    field_diff = (field_1-field_2)
+    field_diff_power = get_power(field_diff)
+
+    power_ratio = field_diff_power/total_power
+
+    return power_ratio
+
+
+def compare_field_energies(field_1: npt.NDArray[complex],
+                   field_2: npt.NDArray[complex])-> float:
+    """
+
+
+    Parameters
+    ----------
+    field_1 : npt.NDArray[complex]
+        First field in time or frequency domain.
+    field_2 : npt.NDArray[complex]
+        Second field in time or frequency domain.
+
+    Returns
+    -------
+    float
+        E(field_1-field_2)/(E(field_1)+E(field_2)).
+
+        A value of 0 means that field_1==field_2
+        A value of 1 means that field_1 and field_2 are very distinct
+    """
+
+    assert len(field_1)==len(field_2), f"ERROR: {len(field_1) =} but "
+    f"{len(field_2)}"
+
+    energy_1 = np.sum(get_power(field_1))
+    energy_2 = np.sum(get_power(field_2))
+
+    field_diff = (field_1-field_2)
+    field_diff_energy = np.sum(get_power(field_diff))
+
+    energy_ratio = (field_diff_energy)/(energy_1+energy_2)
+
+    return energy_ratio
+
+
+def gaussian_pulse_with_beta_2_only(time_s: npt.NDArray[float],
+                                    duration_s: [float],
+                                    amplitude_sqrt_W: [float],
+                                    beta_2_s2_per_m: [float],
+                                    distance_m: [float]) -> npt.NDArray[complex]:
+    """
+    Analytical solution for propagating a Gaussian pulse through a fiber with
+    only dispersion. Useful for unit-testing and comparing
+    with numerical results.
+
+    Parameters
+    ----------
+    time_s : npt.NDArray[float]
+        Time in seconds.
+    duration_s : [float]
+        Duration of Gaussian pulse in seconds.
+    amplitude_sqrt_W : [float]
+        Gaussian pulse amplitude in sqrt(W).
+    beta_2_s2_per_m : [float]
+        Fiber dispersion in s^2/m.
+    distance_m : [float]
+        Fiber length in m.
+
+    Returns
+    -------
+    npt.NDArray[complex]
+        Gaussian pulse after propagating distance_m through fiber with beta_2.
+
+    """
+
+    sigma = np.sqrt(duration_s**2- 1j*beta_2_s2_per_m*distance_m)
+
+    front_factor = duration_s/sigma
+    exponential_factor = np.exp(-0.5*(time_s/sigma)**2)
+
+    return amplitude_sqrt_W*front_factor*exponential_factor
+
+
+
+def run_all_unit_tests(show_plot_flag = False):
+
+    print("  ")
+    print("Running all unit tests !!! ")
+    print("  ")
+
+
+    unit_test_dispersion(show_plot_flag=show_plot_flag)
+    unit_test_nonlinear(show_plot_flag=True)
+    print("  ")
+    print("All unit tests succeeded!!! ")
+    print("  ")
+
+def unit_test_dispersion(show_plot_flag=False):
+    """
+    Unit test comparing the theoretical and numerical effects of dispersion
+    with negative beta2 on a Gaussian puls.
+
+    Parameters
+    ----------
+    show_plot_flag : Bool, optional
+        Flag to toggle shoing graph comparing theoretical to numerical results.
+        The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    print("  ")
+    print("Doing unit test for dispersion with beta2 only!")
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+    N = 2 ** 15  # Number of points
+    dt = 100e-15  # Time resolution [s]
+
+    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(N,
+                              dt,
+                              center_freq_test,
+                              describe_time_freq_flag=False)
+
+    # Set up signal
+    test_FFT_tol = 1e-3
+    test_amplitude = 10.0
+    test_pulse_type = "gaussian"
+    test_amplitude = 0.25
+    test_duration_s = 12e-12
+
+    alpha_test = 0  # dB/m
+    beta_list = [-10.66e-26]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 0  # 1/W/m
+    length_test = 12e3  # m
+    number_of_steps = 2**10
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening=False,
+        describe_fiber_flag=False)
+
+    fiber_list = [fiber_test]  # ,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    test_pulse_type,
+                                    FFT_tol=test_FFT_tol,
+                                    describe_input_signal_flag=False)
+
+
+    exp_name = f"unit_test_dispersion"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=False,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+    final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
+    theoretical_final_pulse = gaussian_pulse_with_beta_2_only(time_freq_test.t,
+                                    test_duration_s,
+                                    test_amplitude, beta_list[0],
+                                    length_test)
+
+
+    if show_plot_flag:
+        fig,ax=plt.subplots(dpi=300)
+        #ax.plot(time_freq_test.t/1e-9,get_power(test_input_signal.pulse_field),label = "Initial pulse")
+        ax.plot(time_freq_test.t/1e-9,get_power(final_pulse),label = "Final pulse numerical")
+        ax.plot(time_freq_test.t/1e-9,get_power(theoretical_final_pulse),label = "Final pulse theoretical")
+        ax.set_xlim(-0.5,0.5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.3),
+            ncol=3,
+            fancybox=True,
+            shadow=True,
+        )
+        plt.show()
+
+    normalized_energy_diff = compare_field_energies(final_pulse,
+                                                    theoretical_final_pulse)
+    assert normalized_energy_diff<7.06e-6, f"""ERROR: Normalized energy
+    difference between numerical and theoretical pulses is
+    {normalized_energy_diff =}, but it should be less than or equal to 7.06e-6.
+    Unit test for dispersion with beta2 only FAILED!!!"""
+
+    print("Unit test for dispersion with beta2 only SUCCEEDED!")
+    print("  ")
+
+
+
+def unit_test_nonlinear(show_plot_flag=False):
+    print("  ")
+    print("Doing unit test for nonlinear with gamma only!")
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+    N = 2 ** 15  # Number of points
+    dt = 100e-15  # Time resolution [s]
+
+    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(N,
+                              dt,
+                              center_freq_test,
+                              describe_time_freq_flag=False)
+
+    # Set up signal
+    test_FFT_tol = 1e-3
+    test_amplitude = 10.0
+    test_pulse_type = "gaussian"
+    test_amplitude = 0.25
+    test_duration_s = 12e-12
+
+    alpha_test = 0  # dB/m
+    beta_list = [0]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 10e-3  # 1/W/m
+    length_test = 12e3  # m
+    number_of_steps = 2**10
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening=False,
+        describe_fiber_flag=False)
+
+    fiber_list = [fiber_test]  # ,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    test_pulse_type,
+                                    FFT_tol=test_FFT_tol,
+                                    describe_input_signal_flag=False)
+
+
+    exp_name = f"unit_test_nonlinear"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=False,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+    final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
+    initial_pulse = np.copy(ssfm_result_list[0].pulse_matrix[0,:])
+    nonlinear_factor = np.exp(1j*
+                              gamma_test*
+                              length_test*
+                              get_power(initial_pulse))
+    theoretical_final_pulse = initial_pulse* nonlinear_factor
+
+
+    if show_plot_flag:
+        fig,ax=plt.subplots(dpi=300)
+        ax.plot(time_freq_test.t/1e-9,get_power(final_pulse),label = "Final pulse numerical")
+        ax.plot(time_freq_test.t/1e-9,get_power(theoretical_final_pulse),label = "Final pulse theoretical")
+        ax.set_xlim(-0.5,0.5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.3),
+            ncol=3,
+            fancybox=True,
+            shadow=True,
+        )
+        plt.show()
+
+        fig,ax=plt.subplots(dpi=300)
+        ax.plot(time_freq_test.f/1e12,get_power(get_spectrum_from_pulse(time_freq_test.t, final_pulse) ),label = "Final spectrum numerical")
+        ax.plot(time_freq_test.f/1e12,get_power(get_spectrum_from_pulse(time_freq_test.t, theoretical_final_pulse)),label = "Final spectrum theoretical")
+        ax.set_xlim(-0.5,0.5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.3),
+            ncol=3,
+            fancybox=True,
+            shadow=True,
+        )
+        plt.show()
+
+
+    normalized_energy_diff = compare_field_energies(final_pulse,
+                                                    theoretical_final_pulse)
+
+    assert normalized_energy_diff<1.58e-24, f"""ERROR: Normalized energy
+    difference between numerical and theoretical pulses is
+    {normalized_energy_diff =}, but it should be less than or equal to 7.06e-6.
+    Unit test for dispersion with gamma only FAILED!!!"""
+
+    print("Unit test for nonlinearity with gamma only SUCCEEDED!")
+    print("  ")
+
+    #plot_first_and_last_pulse(ssfm_result_list, 1000, -20)
+    assert 1==2
+
+
 def get_gamma_from_fiber_params(wavelength_m: float,
                                 n2_m2_W: float,
                                 coreDiameter_m: float) -> float:
@@ -4287,6 +4651,8 @@ def plot_SNR_for_channels(
 
 if __name__ == "__main__":
 
+    run_all_unit_tests()
+    assert 1==2
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
     N = 2 ** 15  # Number of points
