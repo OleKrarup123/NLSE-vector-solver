@@ -1,1 +1,1 @@
-test
+This repo contains a home-made implementaiton of the Split-Step Fourier Method for solving the Nonlinear Schrodinger Equation, which describes the propagation of laser pulses through optical fibers with an intensity dependent refractive index. Initially, I coded NLSE-vector-solver.py during my PhD thesis. This implementation works but is written so poorly that it's unusable for anyone other than myself. I therefore decided to rewrite a new version, ssfm_functions.py, from scratch with user friendliness and reproducibility in mind. 
