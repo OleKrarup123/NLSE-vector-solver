@@ -749,14 +749,11 @@ def random_pulse(
     envelope_list=["gaussian","sech"]
     envelope_func_str = np.random.choice(envelope_list)
 
-    print(envelope_func_str)
     envelope = eval(f"{envelope_func_str}_pulse(normalized_time)")
 
 
     random_phase = np.random.uniform(0,2*pi)
 
-    print(random_poly_roots)
-    print(envelope_func_str)
 
     pulse = polynomial_array*envelope*cos_array*chrip_factor
     pulse/=np.max(np.abs(pulse))
@@ -1653,6 +1650,9 @@ class InputSignal:
                     16*self.duration_s/scalingFactor)
         plt.show()
 
+
+
+
         scalingFactor, prefix = get_units(self.time_freq.f[-1])
         fig, ax = plt.subplots(dpi=300)
         ax.set_title(f'Input signal for {self.pulse_type} in freq domain')
@@ -1670,7 +1670,7 @@ class InputSignal:
 
         plt.show()
 
-    def saveInputSignal(self):
+    def save_input_signal(self):
         """
         Saves info needed to construct this InputSignal instance to .csv
         file so they can be loaded later using the load_input_signal function.
@@ -1681,7 +1681,7 @@ class InputSignal:
 
         self.time_freq.save_TimeFreq()
 
-        if self.pulse_type == "custom" or "random":
+        if self.pulse_type.lower() in ["custom", "random"] :
             custom_input_df = pd.DataFrame(
                 columns=["time_s", "field_sqrt_W_real",
                          "field_sqrt_W_imag"]
@@ -1747,54 +1747,73 @@ def load_input_signal(path: str) -> InputSignal:
     """
     # Open dataframe with pulse parameters
     path_to_saved_input_signal = os.path.join(path)
+    try:
+        try_path = path_to_saved_input_signal + "input_info\Input_signal.csv"
+        df = pd.read_csv(try_path)
 
-    df = pd.read_csv(path_to_saved_input_signal + "\\input_info\\Input_signal.csv")
-
-
-
-    duration_s = df["duration_s"][0]
-    time_offset_s = df["time_offset_s"][0]
-    pulse_type = df["pulse_type"][0]
-    amplitude_sqrt_W = df["amplitude_sqrt_W"][0]
-    freq_offset_Hz = df["freq_offset_Hz"][0]
-    chirp = df["chirp"][0]
-    order = df["order"][0]
-    roll_off_factor = df["roll_off_factor"][0]
-    noise_stdev_sqrt_W = df["noise_stdev_sqrt_W"][0]
-    phase_rad = df["phase_rad"][0]
-    FFT_tol = df["FFT_tol"][0]
-
-
-    # Load timeFreq
-    old_timefreq = load_TimeFreq(path)
+        duration_s = df["duration_s"][0]
+        time_offset_s = df["time_offset_s"][0]
+        pulse_type = df["pulse_type"][0]
+        amplitude_sqrt_W = df["amplitude_sqrt_W"][0]
+        freq_offset_Hz = df["freq_offset_Hz"][0]
+        chirp = df["chirp"][0]
+        order = df["order"][0]
+        roll_off_factor = df["roll_off_factor"][0]
+        noise_stdev_sqrt_W = df["noise_stdev_sqrt_W"][0]
+        phase_rad = df["phase_rad"][0]
+        FFT_tol = df["FFT_tol"][0]
 
 
-    # Initialize class for loaded signal
-    loaded_input_signal = InputSignal(
-        old_timefreq,
-        duration_s,
-        amplitude_sqrt_W,
-        pulse_type,
-        time_offset_s,
-        freq_offset_Hz,
-        chirp,
-        order,
-        roll_off_factor,
-        noise_stdev_sqrt_W,
-        phase_rad,
-        describe_input_signal_flag=True,
-        FFT_tol = FFT_tol
-    )
+        # Load timeFreq
+        old_timefreq = load_TimeFreq(path)
 
-    # If signal type is "custom", load the raw amplitude values
-    if pulse_type == "custom" or "random":
-        df_custom = pd.read_csv(path + "\\Custom_or_random_input_signal.csv")
 
-        A_real = np.array(df_custom["field_sqrt_W_real"])
-        A_imag = np.array(df_custom["field_sqrt_W_imag"])
+        # Initialize class for loaded signal
+        loaded_input_signal = InputSignal(
+            old_timefreq,
+            duration_s,
+            amplitude_sqrt_W,
+            pulse_type,
+            time_offset_s,
+            freq_offset_Hz,
+            chirp,
+            order,
+            roll_off_factor,
+            noise_stdev_sqrt_W,
+            phase_rad,
+            describe_input_signal_flag=False,
+            FFT_tol = FFT_tol
+        )
+
+
+
+    except FileNotFoundError:
+        try_path = path_to_saved_input_signal + "input_info\Custom_or_random_input_signal.csv"
+        df = pd.read_csv(try_path)
+
+        A_real = np.array(df["field_sqrt_W_real"])
+        A_imag = np.array(df["field_sqrt_W_imag"])
         A = A_real + 1j * A_imag
 
+        old_timefreq = load_TimeFreq(path)
+
+        A_spectrum = get_spectrum_from_pulse(old_timefreq.t, A)
+
+        loaded_input_signal = InputSignal(
+            old_timefreq,
+            get_stdev(old_timefreq.t, A),
+            np.sqrt(np.max(get_power(A))),
+            "custom",
+            describe_input_signal_flag=False,
+            FFT_tol = 1e-3
+        )
+
         loaded_input_signal.pulse_field = A
+        loaded_input_signal.spectrum_field = A_spectrum
+
+
+
+
     return loaded_input_signal
 
 
@@ -2482,7 +2501,7 @@ def SSFM(
     fiber_link.save_fiber_link()
 
     # Save input signal parameters
-    input_signal.saveInputSignal()
+    input_signal.save_input_signal()
 
     # Return to main output directory
     os.chdir(current_dir)

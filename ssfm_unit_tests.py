@@ -133,15 +133,246 @@ def self_steepening_pulse(time_freq: TimeFreq,
 def run_all_unit_tests(show_plot_flag = False):
 
 
-
     print("  ")
     print("Running all unit tests !!! ")
     print("  ")
+
+    unit_tests_saveload(show_plot_flag=show_plot_flag)
     unit_tests_dispersion(show_plot_flag=show_plot_flag)
-    unit_test_nonlinear(show_plot_flag=show_plot_flag)
+    unit_tests_nonlinear(show_plot_flag=show_plot_flag)
+
     print("  ")
     print("All unit tests succeeded!!! ")
     print("  ")
+
+def unit_tests_saveload(show_plot_flag = False):
+
+    unit_test_saveload_TimeFreq(show_plot_flag =show_plot_flag)
+    unit_test_saveload_InputSignal(show_plot_flag =show_plot_flag)
+
+def unit_test_saveload_TimeFreq(show_plot_flag = False):
+    """
+    Unit test for saving and loading TimeFreq class from previous run.
+
+    Parameters
+    ----------
+    show_plot_flag : Bool, optional
+        Flag to toggle shoing graph comparing theoretical to numerical results.
+        The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    print("  ")
+    print("Doing unit test for saving/loading TimeFreq only!")
+
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+    N = 2 ** 15  # Number of points
+    dt = 100e-15  # Time resolution [s]
+
+    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(N,
+                              dt,
+                              center_freq_test,
+                              describe_time_freq_flag=False)
+
+
+    # Set up signal
+    test_FFT_tol = 1e-3
+    test_amplitude = 10.0
+    test_pulse_type = "gaussian"
+    test_amplitude = 0.25
+    test_duration_s = 12e-12
+
+    alpha_test = 0  # dB/m
+    beta_list = [0,-25.66e-37]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 0  # 1/W/m
+    length_test = 12e3  # m
+    number_of_steps = 2**0
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening=False,
+        describe_fiber_flag=False)
+
+    fiber_list = [fiber_test]  # ,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    test_pulse_type,
+                                    FFT_tol=test_FFT_tol,
+                                    describe_input_signal_flag=False)
+
+
+
+    exp_name = f"unit_test_TimeFreq"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=False,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+
+    time_freq_loaded = load_TimeFreq(ssfm_result_list[0].dirs[1])
+
+    assert len(time_freq_loaded.t)==N, f"""ERROR: {len(time_freq_loaded.t) = }
+    but {N = }!!!"""
+    assert time_freq_loaded.time_step_s==dt, f"""ERROR: {time_freq_loaded.time_step_s = }
+    but {dt = }!!!"""
+
+    relative_freq_dif=np.abs(time_freq_loaded.center_frequency_Hz
+                       -center_freq_test)/center_freq_test
+    assert relative_freq_dif<1e-12, f"""ERROR {time_freq_loaded.center_frequency_Hz = }
+    but {center_freq_test = }, which is too different!"""
+
+    print("Successfully saved and reloaded TimeFreq!")
+
+
+
+def unit_test_saveload_InputSignal(show_plot_flag = False):
+    """
+    Unit test for saving and loading InputSignal class from previous run.
+
+    Parameters
+    ----------
+    show_plot_flag : Bool, optional
+        Flag to toggle shoing graph comparing theoretical to numerical results.
+        The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    print("  ")
+    print("Doing unit test for saving/loading InputSignal only!")
+
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+    N = 2 ** 15  # Number of points
+    dt = 100e-15  # Time resolution [s]
+
+    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(N,
+                              dt,
+                              center_freq_test,
+                              describe_time_freq_flag=False)
+
+
+    # Set up signal
+    test_FFT_tol = 1e-3
+    test_amplitude = 10.0
+    test_pulse_type = "gaussian"
+    test_amplitude = 0.25
+    test_duration_s = 12e-12
+
+    alpha_test = 0  # dB/m
+    beta_list = [0,-25.66e-37]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 0  # 1/W/m
+    length_test = 12e3  # m
+    number_of_steps = 2**0
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening=False,
+        describe_fiber_flag=False)
+
+    fiber_list = [fiber_test]  # ,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    test_pulse_type,
+                                    time_offset_s=test_duration_s/3,
+                                    freq_offset_Hz=10e9,
+                                    chirp=1,
+                                    phase_rad=pi,
+                                    FFT_tol=test_FFT_tol,
+                                    describe_input_signal_flag=False)
+
+
+    exp_name = f"unit_test_InputSignal_gauss"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=False,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+
+
+
+    input_signal_loaded = load_input_signal(ssfm_result_list[0].dirs[1])
+
+    field_diff_value = compare_field_energies(input_signal_loaded.pulse_field,
+                                              test_input_signal.pulse_field)
+    assert field_diff_value==0.0, f"""ERROR: {field_diff_value = }
+    but should be zero when reloading Gaussian input signal!!!"""
+
+    print("Successfully saved and reloaded InputSignal for Gaussian signal!")
+    print(" ")
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    "random",
+                                    time_offset_s=test_duration_s/3,
+                                    freq_offset_Hz=10e9,
+                                    chirp=1,
+                                    phase_rad=pi,
+                                    FFT_tol=test_FFT_tol,
+                                    describe_input_signal_flag=False)
+
+
+    exp_name = f"unit_test_InputSignal_random"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=False,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+
+
+    input_signal_loaded = load_input_signal(ssfm_result_list[0].dirs[1])
+
+    if show_plot_flag:
+        fig,ax = plt.subplots(dpi=300)
+        ax.plot(time_freq_test.t/1e-9,get_power(test_input_signal.pulse_field))
+        ax.plot(time_freq_test.t/1e-9,get_power(input_signal_loaded.pulse_field))
+        ax.set_xlim(-0.1,0.1)
+        plt.show()
+
+
+    field_diff_value = compare_field_energies(input_signal_loaded.pulse_field,
+                                              test_input_signal.pulse_field)
+    assert field_diff_value<2e-30, f"""ERROR: {field_diff_value = }
+    but should be <2e-30 when reloading random input signal!!!"""
+
+    print("Successfully saved and reloaded InputSignal for Random signal!")
+
 
 
 def unit_tests_dispersion(show_plot_flag=False):
@@ -285,6 +516,7 @@ def unit_test_beta3(show_plot_flag=False):
                               center_freq_test,
                               describe_time_freq_flag=False)
 
+
     # Set up signal
     test_FFT_tol = 1e-3
     test_amplitude = 10.0
@@ -356,7 +588,7 @@ def unit_test_beta3(show_plot_flag=False):
 
     normalized_energy_diff = compare_field_energies(final_pulse,
                                                     theoretical_final_pulse)
-    print(normalized_energy_diff)
+
     assert normalized_energy_diff<8.0e-6, f"""ERROR: Normalized energy
     difference between numerical and theoretical pulses is
     {normalized_energy_diff =}, but it should be less than or equal to 8.0e-06.
@@ -366,7 +598,7 @@ def unit_test_beta3(show_plot_flag=False):
     print("  ")
 
 
-def unit_test_nonlinear(show_plot_flag=False):
+def unit_tests_nonlinear(show_plot_flag=False):
     unit_test_SPM(show_plot_flag)
     unit_test_self_steepening(show_plot_flag)
 
@@ -560,7 +792,9 @@ def unit_test_self_steepening(show_plot_flag=False):
                                     FFT_tol=test_FFT_tol,
                                     describe_input_signal_flag=False)
 
-    print("starting theoretical ss pulse")
+    #Choice of length, duration and power should ensure s=0.01 and Z=10
+    #to match fig. 4.19 in Agrawal.
+    print("Starting theoretical ss pulse.")
     theoretical_final_pulse=self_steepening_pulse(time_freq_test,
                               testDuration,
                               testAmplitude,
