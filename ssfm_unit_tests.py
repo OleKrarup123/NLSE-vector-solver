@@ -10,6 +10,42 @@ from scipy.special import airy
 from scipy.optimize import fsolve
 
 
+def compare_fiber_links(fiber_link_1: FiberLink,fiber_link_2: FiberLink):
+
+    for fiber_idx, (fiber_1, fiber_2) in enumerate(zip(fiber_link_1.fiber_list,
+                                                     fiber_link_2.fiber_list)):
+        assert compare_fibers(fiber_1, fiber_2), f"""Fibers at
+        index {fiber_idx} do not match!!!"""
+
+    return True
+
+def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
+    assert np.isclose(fiber_1.length_m, fiber_2.length_m)
+    assert fiber_1.number_of_steps == fiber_2.number_of_steps
+
+
+    assert np.isclose(fiber_1.gamma_per_W_per_m, fiber_2.gamma_per_W_per_m)
+
+    for beta_n_1, beta_n_2 in zip(fiber_1.beta_list, fiber_2.beta_list):
+        assert np.isclose(beta_n_1,beta_n_2)
+
+    assert np.isclose(fiber_1.alpha_dB_per_m , fiber_2.alpha_dB_per_m)
+    assert fiber_1.use_self_steepening == fiber_2.use_self_steepening
+    assert fiber_1.ramanModel == fiber_2.ramanModel
+    assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB)
+    assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB)
+    assert np.isclose(fiber_1.input_atten_dB , fiber_2.input_atten_dB)
+    assert np.isclose(fiber_1.output_amp_dB , fiber_2.output_amp_dB)
+    assert np.isclose(fiber_1.output_noise_factor_dB , fiber_2.output_noise_factor_dB)
+    assert np.isclose(fiber_1.output_atten_dB , fiber_2.output_atten_dB)
+
+    return True
+
+
+
+
+
+
 def gaussian_pulse_with_beta_2_only(time_s: npt.NDArray[float],
                                     duration_s: [float],
                                     amplitude_sqrt_W: [float],
@@ -147,8 +183,10 @@ def run_all_unit_tests(show_plot_flag = False):
 
 def unit_tests_saveload(show_plot_flag = False):
 
+    unit_test_saveload_FiberLink(show_plot_flag =show_plot_flag)
     unit_test_saveload_TimeFreq(show_plot_flag =show_plot_flag)
     unit_test_saveload_InputSignal(show_plot_flag =show_plot_flag)
+
 
 def unit_test_saveload_TimeFreq(show_plot_flag = False):
     """
@@ -240,6 +278,137 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
 
     print("Successfully saved and reloaded TimeFreq!")
 
+
+def unit_test_saveload_FiberLink(show_plot_flag = False):
+    """
+    Unit test for saving and loading FiberLink class from previous run.
+
+    Parameters
+    ----------
+    show_plot_flag : Bool, optional
+        Flag to toggle shoing graph comparing theoretical to numerical results.
+        The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    print("  ")
+    print("Doing unit test for saving/loading FiberLink only!")
+
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+    N = 2 ** 15  # Number of points
+    dt = 100e-15  # Time resolution [s]
+
+    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(N,
+                              dt,
+                              center_freq_test,
+                              describe_time_freq_flag=False)
+
+
+    # Set up signal
+    test_FFT_tol = 1e-3
+    test_amplitude = 10.0
+    test_pulse_type = "gaussian"
+    test_amplitude = 0.25
+    test_duration_s = 12e-12
+
+    alpha_test = -0.22/1e3  # dB/m
+    beta_list = [-21e-27,
+                 -25.66e-37,
+                 25.66e-47,
+                 25.66e-57,
+                 25.66e-67,
+                 25.66e-77,
+                 25.66e-87]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 1e-3  # 1/W/m
+    length_test = 100e3  # m
+    number_of_steps = 2**5
+
+
+    fiber_test_1 = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening=True,
+        ramanModel=None,
+        input_atten_dB=1,
+        input_amp_dB=1.0,
+        input_noise_factor_dB=-10,
+        output_atten_dB=1.0,
+        output_amp_dB=24,
+        output_noise_factor_dB=-10,
+        describe_fiber_flag=False)
+
+    fiber_test_2 = FiberSpan(
+        length_test/2,
+        number_of_steps/2,
+        gamma_test/2,
+        list(np.array(beta_list)/2),
+        alpha_test/2,
+        use_self_steepening=False,
+        ramanModel=None,
+        input_atten_dB=1/2,
+        input_amp_dB=1.0/2,
+        input_noise_factor_dB=-10/2,
+        output_atten_dB=1.0/2,
+        output_amp_dB=24/2,
+        output_noise_factor_dB=-10/2,
+        describe_fiber_flag=False)
+
+    fiber_test_3 = FiberSpan(
+        length_test/3,
+        number_of_steps/4,
+        gamma_test/3,
+        list(np.array(beta_list)/3),
+        alpha_test/3,
+        use_self_steepening=True,
+        ramanModel=None,
+        input_atten_dB=1/3,
+        input_amp_dB=1.0/3,
+        input_noise_factor_dB=-10/3,
+        output_atten_dB=1.0/3,
+        output_amp_dB=24/3,
+        output_noise_factor_dB=-10/3,
+        describe_fiber_flag=False)
+
+    fiber_list = [fiber_test_1,fiber_test_2,fiber_test_3]  # ,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    test_pulse_type,
+                                    FFT_tol=test_FFT_tol,
+                                    describe_input_signal_flag=False)
+
+
+
+    exp_name = f"unit_test_FiberLink"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=False,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+
+
+
+
+    fiber_link_loaded = load_fiber_link(ssfm_result_list[0].dirs[1])
+
+    assert compare_fiber_links(fiber_link, fiber_link_loaded)
+
+    print("Successfully saved and reloaded FiberLink!")
 
 
 def unit_test_saveload_InputSignal(show_plot_flag = False):
@@ -372,6 +541,9 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
     but should be <2e-30 when reloading random input signal!!!"""
 
     print("Successfully saved and reloaded InputSignal for Random signal!")
+
+
+
 
 
 

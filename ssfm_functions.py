@@ -1057,12 +1057,13 @@ def square_filter_power(freq, center_freq, width):
 
 
 class FiberSpan:
+    #TODO: Redo docstring
     """
     Class for storing info about a single fiber span.
 
     Attributes:
         Length (float): Length of fiber in [m]
-        numberOfSteps (int): Number of identical steps
+        number_of_steps (int): Number of identical steps
                              the fiber is divided into
         gamma (float): Nonlinearity parameter in [1/W/m]
         beta_list (list): List of dispersion
@@ -1080,21 +1081,21 @@ class FiberSpan:
 
     def __init__(
         self,
-        L: float,
-        numberOfSteps: int,
-        gamma: float,
+        length_m: float,
+        number_of_steps: int,
+        gamma_per_W_per_m: float,
         beta_list: list[float],
         alpha_dB_per_m: float,
         use_self_steepening: bool = False,
         ramanModel: str = "None",
+        input_atten_dB: float = 0.0,
         input_amp_dB: float = 0.0,
         input_noise_factor_dB: float = -1e3,
-        input_atten_dB: float = 0.0,
         input_filter_power_function=None,
+        output_filter_power_function=None,
         output_amp_dB: float = 0.0,
         output_noise_factor_dB: float = -1e3,
         output_atten_dB: float = 0.0,
-        output_filter_power_function=None,
         describe_fiber_flag = True
     ):
         """
@@ -1105,7 +1106,7 @@ class FiberSpan:
         ----------
         L : float
             Length of fiber in [m].
-        numberOfSteps : int
+        number_of_steps : int
             Number of identical steps the fiber is divided into
         gamma : float
             Nonlinearity parameter in [1/W/m].
@@ -1147,12 +1148,12 @@ class FiberSpan:
         None.
 
         """
-        self.Length = float(L)
-        self.numberOfSteps = int(numberOfSteps)
-        self.z_array = np.linspace(0, self.Length, self.numberOfSteps + 1)
+        self.length_m = float(length_m)
+        self.number_of_steps = int(number_of_steps)
+        self.z_array = np.linspace(0, self.length_m, self.number_of_steps + 1)
         self.dz = self.z_array[1] - self.z_array[0]
 
-        self.gamma = float(gamma)
+        self.gamma_per_W_per_m = float(gamma_per_W_per_m)
 
         # Pad list of betas so we always have terms up to 8th order
         while len(beta_list) <= 6:
@@ -1170,15 +1171,22 @@ class FiberSpan:
         # TODO: Implement Raman model
         # Default: No Raman effect
         self.ramanModel = ramanModel
+        if str(ramanModel).lower() == "none":
+            self.ramanModel = None
+
         self.fR = 0.0
         self.tau1 = 0.0
         self.tau2 = 0.0
 
         self.RamanInFreqDomain_func = lambda freq: 0.0
 
+        if self.ramanModel is None:
+            self.RamanInFreqDomain_func = lambda freq: 0.0
+
         # Raman parameters taken from Govind P. Agrawal's book,
         # "Nonlinear Fiber Optics".
-        if ramanModel.lower() == "agrawal":
+
+        elif str(self.ramanModel).lower() == "agrawal":
             self.fR = (
                 0.180  # Relative contribution of Raman effect to overall nonlinearity
             )
@@ -1218,7 +1226,7 @@ class FiberSpan:
             self.output_filter_power_function = output_filter_power_function
 
         self.total_gainloss_dB = (self.input_atten_dB+self.input_amp_dB
-                              +alpha_dB_per_m * self.Length
+                              +alpha_dB_per_m * self.length_m
                               +self.output_amp_dB+self.output_atten_dB)
 
         if describe_fiber_flag:
@@ -1237,8 +1245,8 @@ class FiberSpan:
         print(" ### Characteristic parameters of fiber: ###", file=d)
         print(' ', file=d)
         print("\t*** Fiber size info: ***", file=d)
-        print(f"\t\tFiber Length [km] \t\t= {self.Length/1e3} ", file=d)
-        print(f"\t\tNumber of Steps \t\t= {self.numberOfSteps} ", file=d)
+        print(f"\t\tFiber Length [km] \t\t= {self.length_m/1e3} ", file=d)
+        print(f"\t\tNumber of Steps \t\t= {self.number_of_steps} ", file=d)
         print(f"\t\tdz [m] \t\t\t\t\t= {self.dz} ", file=d)
         print(' ', file=d)
 
@@ -1268,7 +1276,7 @@ class FiberSpan:
 
 
         print("\t*** Fiber nonlinear info: ***", file=d)
-        print(f"\t\tFiber gamma [1/W/m] \t= {self.gamma} ", file=d)
+        print(f"\t\tFiber gamma [1/W/m] \t= {self.gamma_per_W_per_m} ", file=d)
         print(f"\t\tFiber self steepening \t= {self.use_self_steepening} ", file=d)
         print(f"\t\tRaman Model \t\t\t= {self.ramanModel}.")
         print(f"\t\t(fR,tau1 [fs],tau2[fs])\t= ({self.fR:.3},{self.tau1/1e-15:.3},{self.tau2/1e-15:.3})",file=d)
@@ -1333,7 +1341,7 @@ class FiberLink:
         length_so_far = 0.0
 
         for fiber in self.fiber_list:
-            length_so_far += fiber.Length
+            length_so_far += fiber.length_m
 
         return length_so_far
 
@@ -1341,10 +1349,11 @@ class FiberLink:
         disp_so_far = np.zeros_like(self.fiber_list[0].beta_list)
 
         for fiber in self.fiber_list:
-            disp_so_far += fiber.Length*np.array(fiber.beta_list)
+            disp_so_far += fiber.length_m*np.array(fiber.beta_list)
 
         return disp_so_far
 
+    #TODO: Find a way to save filter functions
     def save_fiber_link(self):
         """
         Saves info about each fiber in span to .csv file so they can be
@@ -1353,10 +1362,13 @@ class FiberLink:
         Parameters:
             self
         """
+
+
+
         fiber_df = pd.DataFrame(
             columns=[
-                "Length_m",
-                "numberOfSteps",
+                "length_m",
+                "number_of_steps",
                 "gamma_per_W_per_m",
                 "beta2_s2_per_m",
                 "beta3_s3_per_m",
@@ -1366,16 +1378,24 @@ class FiberLink:
                 "beta7_s7_per_m",
                 "beta8_s8_per_m",
                 "alpha_dB_per_m",
-                "alpha_Np_per_m",
+                "use_self_steepening",
                 "ramanModel",
+                "input_atten_dB",
+                "input_amp_dB",
+                "input_noise_factor_dB",
+                "output_amp_dB",
+                "output_noise_factor_dB",
+                "output_atten_dB"
+
+
             ]
         )
 
         for fiber in self.fiber_list:
             fiber_df.loc[len(fiber_df.index)] = [
-                fiber.Length,
-                fiber.numberOfSteps,
-                fiber.gamma,
+                fiber.length_m,
+                fiber.number_of_steps,
+                fiber.gamma_per_W_per_m,
                 fiber.beta_list[0],
                 fiber.beta_list[1],
                 fiber.beta_list[2],
@@ -1384,12 +1404,19 @@ class FiberLink:
                 fiber.beta_list[5],
                 fiber.beta_list[6],
                 fiber.alpha_dB_per_m,
-                fiber.alpha_Np_per_m,
-                fiber.ramanModel,
+                fiber.use_self_steepening,
+                str(fiber.ramanModel),
+                fiber.input_atten_dB,
+                fiber.input_amp_dB,
+                fiber.input_noise_factor_dB,
+                fiber.output_amp_dB,
+                fiber.output_noise_factor_dB,
+                fiber.output_atten_dB
             ]
         fiber_df.to_csv("fiber_link.csv", index=False)
 
 
+#TODO: Find a way to load filter functions
 def load_fiber_link(path: str) -> FiberLink:
     """
     Loads FiberLink for previous run
@@ -1404,24 +1431,34 @@ def load_fiber_link(path: str) -> FiberLink:
         FiberLink: A class containing a list of fibers from a previous run.
 
     """
-    df = pd.read_csv(path + "\\fiber_link.csv")
-    Length_m = df["Length_m"]
-    numberOfSteps = df["numberOfSteps"]
+
+
+
+
+    df = pd.read_csv(path + "input_info\\fiber_link.csv")
+    length_m = df["length_m"]
+    number_of_steps = df["number_of_steps"]
     gamma_per_W_per_m = df["gamma_per_W_per_m"]
     beta2_s2_per_m = df["beta2_s2_per_m"]
-    beta3_s3_per_m = df["beta2_s3_per_m"]
-    beta4_s4_per_m = df["beta2_s4_per_m"]
-    beta5_s5_per_m = df["beta2_s5_per_m"]
-    beta6_s6_per_m = df["beta2_s6_per_m"]
-    beta7_s7_per_m = df["beta2_s7_per_m"]
-    beta8_s8_per_m = df["beta2_s8_per_m"]
-
+    beta3_s3_per_m = df["beta3_s3_per_m"]
+    beta4_s4_per_m = df["beta4_s4_per_m"]
+    beta5_s5_per_m = df["beta5_s5_per_m"]
+    beta6_s6_per_m = df["beta6_s6_per_m"]
+    beta7_s7_per_m = df["beta7_s7_per_m"]
+    beta8_s8_per_m = df["beta8_s8_per_m"]
     alpha_dB_per_m = df["alpha_dB_per_m"]
+    use_self_steepening = df["use_self_steepening"]
     ramanModel = df["ramanModel"]
+    input_atten_dB=df["input_atten_dB"],
+    input_amp_dB=df["input_amp_dB"],
+    input_noise_factor_dB=df["input_noise_factor_dB"],
+    output_amp_dB=df["output_amp_dB"],
+    output_noise_factor_dB=df["output_noise_factor_dB"],
+    output_atten_dB=df["output_atten_dB"]
 
     fiber_list = []
 
-    for i in range(len(Length_m)):
+    for i in range(len(length_m)):
         beta_list_i = [
             beta2_s2_per_m[i],
             beta3_s3_per_m[i],
@@ -1431,14 +1468,20 @@ def load_fiber_link(path: str) -> FiberLink:
             beta7_s7_per_m[i],
             beta8_s8_per_m[i],
         ]
-
         current_fiber = FiberSpan(
-            Length_m[i],
-            numberOfSteps[i],
+            length_m[i],
+            number_of_steps[i],
             gamma_per_W_per_m[i],
             beta_list_i,
             alpha_dB_per_m[i],
-            ramanModel[i],
+            use_self_steepening = use_self_steepening[i],
+            ramanModel=ramanModel[i],
+            input_atten_dB=input_atten_dB[0][i],
+            input_amp_dB=input_amp_dB[0][i],
+            input_noise_factor_dB=input_noise_factor_dB[0][i],
+            output_amp_dB=output_amp_dB[0][i],
+            output_noise_factor_dB=output_noise_factor_dB[0][i],
+            output_atten_dB=output_atten_dB[i]
         )
         fiber_list.append(current_fiber)
     return FiberLink(fiber_list)
@@ -1575,7 +1618,9 @@ class InputSignal:
 
         """
         self.spectrum_field = get_spectrum_from_pulse(
-            self.time_freq.t, self.pulse_field, FFT_tol=self.FFT_tol
+            self.time_freq.t,
+            self.pulse_field,
+            FFT_tol=self.FFT_tol
         )
         self.update_Pmax()
         self.update_Amax()
@@ -1966,7 +2011,7 @@ def describe_sim_parameters(
 
 
     """
-    scalingfactor, prefix = get_units(fiber.Length)
+    scalingfactor, prefix = get_units(fiber.length_m)
     length_list = np.array([])
     # Ensure that we don't measure distances in Mm or Gm
     if scalingfactor > 1e3:
@@ -1981,17 +2026,17 @@ def describe_sim_parameters(
     print(" ### Characteristic parameters of simulation: ###",
           file=destination)
     print(
-        f"  Length_fiber \t= {fiber.Length/scalingfactor:.2e} {prefix}m",
+        f"  Length_fiber \t= {fiber.length_m/scalingfactor:.2e} {prefix}m",
         file=destination,
     )
 
     if fiber.alpha_Np_per_m == 0.0:
-        L_eff = fiber.Length
+        L_eff = fiber.length_m
 
     else:
 
         L_eff = (
-            np.exp(fiber.alpha_Np_per_m * fiber.Length)-1
+            np.exp(fiber.alpha_Np_per_m * fiber.length_m)-1
         ) / fiber.alpha_Np_per_m
 
     print(
@@ -2001,7 +2046,7 @@ def describe_sim_parameters(
 
     length_list = np.append(length_list, L_eff)
     if destination is not None:
-        ax.barh("Fiber Length", fiber.Length / scalingfactor, color="C0")
+        ax.barh("Fiber Length", fiber.length_m / scalingfactor, color="C0")
 
         if fiber.alpha_Np_per_m > 0:
             ax.barh("Effective Length", L_eff / scalingfactor, color="C1")
@@ -2028,9 +2073,9 @@ def describe_sim_parameters(
         else:
             Length_disp = 1e100
         Length_disp_array[i] = Length_disp
-    if fiber.gamma != 0.0:
+    if fiber.gamma_per_W_per_m != 0.0:
 
-        Length_NL = 1 / fiber.gamma / input_signal.Pmax
+        Length_NL = 1 / fiber.gamma_per_W_per_m / input_signal.Pmax
         N_soliton = np.sqrt(Length_disp_array[0] / Length_NL)
         length_list = np.append(length_list, Length_NL)
 
@@ -2065,12 +2110,12 @@ def describe_sim_parameters(
 
         # https://prefetch.eu/know/concept/modulational-instability/
         f_MI = (
-            np.sqrt(2 * fiber.gamma * input_signal.Pmax /
+            np.sqrt(2 * fiber.gamma_per_W_per_m * input_signal.Pmax /
                     np.abs(fiber.beta_list[0]))
             / 2
             / pi
         )
-        gain_MI = 2 * fiber.gamma * input_signal.Pmax
+        gain_MI = 2 * fiber.gamma_per_W_per_m * input_signal.Pmax
         print(f"   Freq. w. max MI gain = {f_MI/1e9:.2e}GHz", file=destination)
         print(
             f"   Max MI gain  = {gain_MI*scalingfactor:.2e} /{prefix}m ",
@@ -2086,7 +2131,7 @@ def describe_sim_parameters(
         if destination is not None:
             ax.barh("MI gain Length", 1 / (gain_MI * scalingfactor),
                     color="C5")
-    elif fiber.beta_list[0] > 0 and fiber.gamma > 0:
+    elif fiber.beta_list[0] > 0 and fiber.gamma_per_W_per_m > 0:
         # https://prefetch.eu/know/concept/optical-wave-breaking/
         # Minimum N-value of Optical Wave breaking with Gaussian pulse
         Nmin_OWB = np.exp(3 / 4) / 2
@@ -2129,7 +2174,7 @@ def describe_sim_parameters(
         ax.set_xlabel(f"Length [{prefix}m]")
 
         Lmin = np.min(length_list) / scalingfactor * 1e-1
-        Lmax = fiber.Length / scalingfactor * 1e2
+        Lmax = fiber.length_m / scalingfactor * 1e2
         ax.set_xlim(Lmin, Lmax)
 
         plt.savefig(
@@ -2330,7 +2375,7 @@ def get_NL_factor_simple(fiber: FiberSpan,
 
     """
 
-    return np.exp(1j * fiber.gamma * get_power(pulse) * dz_m)
+    return np.exp(1j * fiber.gamma_per_W_per_m * get_power(pulse) * dz_m)
 
 
 def get_NL_factor_self_steepening(fiber: FiberSpan,
@@ -2363,7 +2408,7 @@ def get_NL_factor_self_steepening(fiber: FiberSpan,
 
     """
     pulse_power = get_power(pulse)
-    output = np.exp(1j * fiber.gamma*(pulse_power+1j/2/np.pi/timeFreq.center_frequency_Hz /
+    output = np.exp(1j * fiber.gamma_per_W_per_m*(pulse_power+1j/2/np.pi/timeFreq.center_frequency_Hz /
                     (pulse+np.sqrt(np.max(pulse_power))/1e6*(1+0j))*np.gradient(pulse_power*pulse, timeFreq.t)) * dz_m)
 
     return output
@@ -2393,7 +2438,7 @@ def get_NL_factor_full(fiber: FiberSpan,
     NR_in_freq_domain = (
         1j
         * dz_m
-        * fiber.gamma
+        * fiber.gamma_per_W_per_m
         * (1.0 + freq / f0)
         * get_pulse_from_spectrum(freq, NR_func(get_spectrum_from_pulse(timeFreq.t, pulse)))
     )
@@ -2565,7 +2610,7 @@ def SSFM(
         else:
             NL_function = get_NL_factor_simple
 
-        if fiber.ramanModel != "None":
+        if fiber.ramanModel is not None:
             NL_function = get_NL_factor_full
 
         inputAttenuationField_lin = np.sqrt(dB_to_lin(fiber.input_atten_dB))
@@ -2620,9 +2665,9 @@ def SSFM(
         # Apply half dispersion step
         # Save outputs and proceed to next fiber
 
-        print(f"Running SSFM with {fiber.numberOfSteps} steps")
+        print(f"Running SSFM with {fiber.number_of_steps} steps")
         updates = 0
-        for z_step_index in range(fiber.numberOfSteps):
+        for z_step_index in range(fiber.number_of_steps):
 
             # Apply nonlinearity
             pulse *= NL_function(fiber,
@@ -2634,7 +2679,7 @@ def SSFM(
                 t, pulse, FFT_tol=FFT_tol) * (disp_and_loss)
 
             # If at the end of fiber span, apply output amp and noise
-            if z_step_index == fiber.numberOfSteps - 1:
+            if z_step_index == fiber.number_of_steps - 1:
                 randomPhases = np.random.uniform(-pi, pi, len(f))
                 randomPhaseFactor = np.exp(1j * randomPhases)
                 outputAttenuationField_lin = np.sqrt(dB_to_lin(
@@ -2668,7 +2713,7 @@ def SSFM(
                                             spectrum,
                                             FFT_tol=FFT_tol)
 
-            finished = 100 * (z_step_index / fiber.numberOfSteps)
+            finished = 100 * (z_step_index / fiber.number_of_steps)
             if divmod(finished, 10)[0] > updates and show_progress_flag:
                 updates += 1
                 print(
@@ -2754,7 +2799,7 @@ def unpack_Zvals(ssfm_result_list: list[SSFMResult]) -> npt.NDArray[float]:
         elif i == number_of_fibers - 1:
             zvals = np.append(
                 zvals, ssfm_result.fiber.z_array + previous_length)
-        previous_length += ssfm_result.fiber.Length
+        previous_length += ssfm_result.fiber.length_m
     return zvals
 
 
@@ -4105,7 +4150,7 @@ def get_value_at_freq(freqList: npt.NDArray[float],
 def get_current_SNR_dB(freqs: npt.NDArray[float],
                        spectrum: npt.NDArray[complex],
                        channel: ChannelClass,
-                       freqTol: float = 0.05) -> float:
+                       freqTolength_m: float = 0.05) -> float:
     """
     Get SNR of channel in spectrum
 
@@ -4193,7 +4238,7 @@ def get_current_SNR_dB(freqs: npt.NDArray[float],
 
 def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
                        channel: ChannelClass,
-                       freqTol: float = 0.05
+                       freqTolength_m: float = 0.05
                        ) -> [npt.NDArray[float], npt.NDArray[float]]:
     """
     Calculates SNR throughout fiber span for a given channel
@@ -4237,7 +4282,7 @@ def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
 
 def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
                      channel_list: list[ChannelClass],
-                     freqTol: float = 0.05) -> npt.NDArray[float]:
+                     freqTolength_m: float = 0.05) -> npt.NDArray[float]:
     """
     Calculates SNR for all channels at output of fiber span
 
@@ -4276,7 +4321,7 @@ def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
 
 def plot_final_SNR_dB(ssfm_result_list: list[SSFMResult],
                       channel_list: list,
-                      freqTol: float = 0.05):
+                      freqTolength_m: float = 0.05):
     """
     Plots the SNR at the output of a fiber span
 
@@ -4356,7 +4401,7 @@ def plot_SNR_for_channels(
 
     distance_so_far = 0.0
     for result in ssfm_result_list:
-        distance_so_far += result.fiber.Length
+        distance_so_far += result.fiber.length_m
         ax.axvline(x=distance_so_far / 1e3, color="black",
                    linestyle="--", alpha=1.0)
     for idx, channelNumber in enumerate(channelNumber_list):
