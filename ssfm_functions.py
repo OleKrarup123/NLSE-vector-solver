@@ -64,6 +64,9 @@ PULSE_TYPE_LIST = ["random",
 np.random.seed(123456)
 
 
+
+
+
 def get_freq_range_from_time(time_s: npt.NDArray[float]
                              ) -> npt.NDArray[float]:
     """
@@ -458,6 +461,33 @@ def get_power(field_in_time_or_freq_domain: npt.NDArray[complex]
     """
     power = np.abs(field_in_time_or_freq_domain) ** 2
     return power
+
+
+def get_photon_number(freq_Hz: npt.NDArray[float],
+                      field_in_freq_domain: npt.NDArray[float])-> float:
+    """
+
+
+    Parameters
+    ----------
+    freq_Hz : npt.NDArray[float]
+        Absolute frequency axis in Hz.
+    field_in_freq_domain : npt.NDArray[float]
+        Field in frequency domain in units of sqrt(J/Hz).
+
+    Returns
+    -------
+    Number of photons in the spectrum as a float.
+    """
+
+    Delta_freq_Hz = freq_Hz[0]-freq_Hz[1]
+
+    field_sum = np.sum(get_power(field_in_freq_domain)/freq_Hz)
+
+
+    return field_sum/(PLANCKCONST_J_PER_HZ*Delta_freq_Hz)
+
+
 
 
 def get_energy(
@@ -1087,7 +1117,7 @@ class FiberSpan:
         beta_list: list[float],
         alpha_dB_per_m: float,
         use_self_steepening: bool = False,
-        ramanModel: str = "None",
+        raman_model: str = "None",
         input_atten_dB: float = 0.0,
         input_amp_dB: float = 0.0,
         input_noise_factor_dB: float = -1e3,
@@ -1114,7 +1144,7 @@ class FiberSpan:
             List of dispersion coefficients [beta2,beta3,...] [s^(entry+2)/m].
         alpha_dB_per_m : float
             Attenuation coeff in [dB/m].
-        ramanModel : str, optional
+        raman_model : str, optional
             String to select Raman model. Default, "None", indicates that Raman
             should be ignored for this fiber.
         input_amp_dB : float, optional
@@ -1170,9 +1200,9 @@ class FiberSpan:
 
         # TODO: Implement Raman model
         # Default: No Raman effect
-        self.ramanModel = ramanModel
-        if str(ramanModel).lower() == "none":
-            self.ramanModel = None
+        self.raman_model = raman_model
+        if str(raman_model).lower() == "none":
+            self.raman_model = None
 
         self.fR = 0.0
         self.tau1 = 0.0
@@ -1180,13 +1210,13 @@ class FiberSpan:
 
         self.RamanInFreqDomain_func = lambda freq: 0.0
 
-        if self.ramanModel is None:
+        if self.raman_model is None:
             self.RamanInFreqDomain_func = lambda freq: 0.0
 
         # Raman parameters taken from Govind P. Agrawal's book,
         # "Nonlinear Fiber Optics".
 
-        elif str(self.ramanModel).lower() == "agrawal":
+        elif str(self.raman_model).lower() == "agrawal":
             self.fR = (
                 0.180  # Relative contribution of Raman effect to overall nonlinearity
             )
@@ -1278,7 +1308,7 @@ class FiberSpan:
         print("\t*** Fiber nonlinear info: ***", file=d)
         print(f"\t\tFiber gamma [1/W/m] \t= {self.gamma_per_W_per_m} ", file=d)
         print(f"\t\tFiber self steepening \t= {self.use_self_steepening} ", file=d)
-        print(f"\t\tRaman Model \t\t\t= {self.ramanModel}.")
+        print(f"\t\tRaman Model \t\t\t= {self.raman_model}.")
         print(f"\t\t(fR,tau1 [fs],tau2[fs])\t= ({self.fR:.3},{self.tau1/1e-15:.3},{self.tau2/1e-15:.3})",file=d)
 
         print(" ", file=d)
@@ -1379,7 +1409,7 @@ class FiberLink:
                 "beta8_s8_per_m",
                 "alpha_dB_per_m",
                 "use_self_steepening",
-                "ramanModel",
+                "raman_model",
                 "input_atten_dB",
                 "input_amp_dB",
                 "input_noise_factor_dB",
@@ -1405,7 +1435,7 @@ class FiberLink:
                 fiber.beta_list[6],
                 fiber.alpha_dB_per_m,
                 fiber.use_self_steepening,
-                str(fiber.ramanModel),
+                str(fiber.raman_model),
                 fiber.input_atten_dB,
                 fiber.input_amp_dB,
                 fiber.input_noise_factor_dB,
@@ -1448,7 +1478,7 @@ def load_fiber_link(path: str) -> FiberLink:
     beta8_s8_per_m = df["beta8_s8_per_m"]
     alpha_dB_per_m = df["alpha_dB_per_m"]
     use_self_steepening = df["use_self_steepening"]
-    ramanModel = df["ramanModel"]
+    raman_model = df["raman_model"]
     input_atten_dB=df["input_atten_dB"],
     input_amp_dB=df["input_amp_dB"],
     input_noise_factor_dB=df["input_noise_factor_dB"],
@@ -1475,7 +1505,7 @@ def load_fiber_link(path: str) -> FiberLink:
             beta_list_i,
             alpha_dB_per_m[i],
             use_self_steepening = use_self_steepening[i],
-            ramanModel=ramanModel[i],
+            raman_model=raman_model[i],
             input_atten_dB=input_atten_dB[0][i],
             input_amp_dB=input_amp_dB[0][i],
             input_noise_factor_dB=input_noise_factor_dB[0][i],
@@ -2610,7 +2640,7 @@ def SSFM(
         else:
             NL_function = get_NL_factor_simple
 
-        if fiber.ramanModel is not None:
+        if fiber.raman_model is not None:
             NL_function = get_NL_factor_full
 
         inputAttenuationField_lin = np.sqrt(dB_to_lin(fiber.input_atten_dB))
@@ -3629,6 +3659,68 @@ def get_stdev(time_or_freq: npt.NDArray[float],
     return stdev
 
 
+
+def plot_photon_number(ssfm_result_list: list[SSFMResult]):
+    """
+    Plots how photon number changes with distance
+
+    Uses get_photon_number on spectrum at each z to see how photon number
+    chages. Should be constant when alpha_dB/m = 0.0 even in the presence of
+    dispersion an nonlinearity.
+
+    Parameters
+    ----------
+    ssfm_result_list : list[SSFMResult]
+        List of ssmf_result_class objects corresponding to each fiber segment.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    center_freq_Hz = timeFreq.center_frequency_Hz
+    zvals = unpack_Zvals(ssfm_result_list)
+
+    spectrum_matrix = unpack_matrix(
+        ssfm_result_list, zvals, "spectrum")
+
+    photon_number_array = np.zeros(len(zvals)) * 1.0
+
+    f = -timeFreq.f+center_freq_Hz  # Minus must be included here due to -i*omega*t sign convention
+
+
+    for i, spectrum in enumerate(spectrum_matrix):
+
+        photon_number_array[i] = get_photon_number(f, spectrum)
+
+
+    scalingFactor_Z, prefix_Z = get_units(np.max(zvals))
+
+
+    os.chdir(ssfm_result_list[0].dirs[1])
+    fig, ax = plt.subplots(dpi=300)
+    fig.patch.set_facecolor('white')
+    plt.title("Evolution of photon number")
+    N0 = photon_number_array[0]
+    change_in_photon_number_percent = (photon_number_array-N0)/N0*100
+    ax.plot(zvals / scalingFactor_Z, change_in_photon_number_percent)
+
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.set_xlabel(f"Distance [{prefix_Z}m]")
+    ax.set_ylabel(f"Change in Photon number [%]", color="C0")
+
+    print(np.max(photon_number_array))
+
+
+    save_plot("photon_number_evo")
+    plt.show()
+    os.chdir(ssfm_result_list[0].dirs[0])
+
+
 def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     """
     Plots how spectral and temporal width of signal change with distance
@@ -3788,6 +3880,7 @@ def plot_everything_about_result(
 
     """
     plot_avg_and_std_of_time_and_freq(ssfm_result_list)
+    plot_photon_number(ssfm_result_list)
     plot_everything_about_pulses(
         ssfm_result_list, nrange_pulse, dB_cutoff_pulse, **kwargs)
 
@@ -4150,7 +4243,7 @@ def get_value_at_freq(freqList: npt.NDArray[float],
 def get_current_SNR_dB(freqs: npt.NDArray[float],
                        spectrum: npt.NDArray[complex],
                        channel: ChannelClass,
-                       freqTolength_m: float = 0.05) -> float:
+                       freqTol: float = 0.05) -> float:
     """
     Get SNR of channel in spectrum
 
@@ -4238,7 +4331,7 @@ def get_current_SNR_dB(freqs: npt.NDArray[float],
 
 def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
                        channel: ChannelClass,
-                       freqTolength_m: float = 0.05
+                       freqTol: float = 0.05
                        ) -> [npt.NDArray[float], npt.NDArray[float]]:
     """
     Calculates SNR throughout fiber span for a given channel
@@ -4282,7 +4375,7 @@ def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
 
 def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
                      channel_list: list[ChannelClass],
-                     freqTolength_m: float = 0.05) -> npt.NDArray[float]:
+                     freqTol: float = 0.05) -> npt.NDArray[float]:
     """
     Calculates SNR for all channels at output of fiber span
 
@@ -4321,7 +4414,7 @@ def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
 
 def plot_final_SNR_dB(ssfm_result_list: list[SSFMResult],
                       channel_list: list,
-                      freqTolength_m: float = 0.05):
+                      freqTol: float = 0.05):
     """
     Plots the SNR at the output of a fiber span
 
@@ -4450,7 +4543,7 @@ if __name__ == "__main__":
 
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
-    N = 2 ** 15  # Number of points
+    N = 2 ** 14  # Number of points
     dt = 100e-15  # Time resolution [s]
 
     center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
@@ -4459,15 +4552,15 @@ if __name__ == "__main__":
     # Set up signal
     test_FFT_tol = 1e-3
     test_amplitude = 10.0
-    test_pulse_type = "sinc"
+    test_pulse_type = "gaussian"
     test_amplitude = 0.25
     test_duration_s = 12e-12
 
-    alpha_test = -0.22/1e3  # dB/m
+    alpha_test = 0#-0.22/1e3  # dB/m
     beta_list = [-10.66e-26]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    gamma_test = 1e-3  # 1/W/m
+    gamma_test = 1e-2  # 1/W/m
     length_test = 12e3  # m
-    number_of_steps = 2**8
+    number_of_steps = 2**9
 
     fiber_test = FiberSpan(
         length_test,
@@ -4477,37 +4570,35 @@ if __name__ == "__main__":
         alpha_test,
         use_self_steepening=False)
 
-    fiber_list = [fiber_test,fiber_test,fiber_test]  # ,fiber_test_2
+    fiber_list = [fiber_test]  # ,fiber_test_2
     fiber_link = FiberLink(fiber_list)
 
-    for pulse_type in PULSE_TYPE_LIST:
-        test_input_signal = InputSignal(time_freq_test,
-                                        test_duration_s,
-                                        test_amplitude,
-                                        pulse_type,
-                                        order=4,
-                                        roll_off_factor=0.25,
-                                        FFT_tol=test_FFT_tol)
-        exp_name = f"pulse_test_{pulse_type}"
-        # Run SSFM
-        ssfm_result_list = SSFM(
-            fiber_link,
-            test_input_signal,
-            show_progress_flag=True,
-            experiment_name=exp_name,
-            FFT_tol=test_FFT_tol
-        )
-        nrange = N
-        dB_cutoff = -60
 
-        plot_everything_about_result(
-            ssfm_result_list,
-            nrange,
-            dB_cutoff,
-            nrange,
-            dB_cutoff,
-            show_3D_plot_flag=False)
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    test_pulse_type,
+                                    FFT_tol=test_FFT_tol)
+    exp_name = f"photon_number_test"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+    nrange = 500
+    dB_cutoff = -60
 
-        assert 1 == 2
 
-    assert 1 == 2
+
+    plot_everything_about_result(
+        ssfm_result_list,
+        nrange,
+        dB_cutoff,
+        nrange,
+        dB_cutoff,
+        show_3D_plot_flag=False)
+
+
