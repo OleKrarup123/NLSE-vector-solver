@@ -31,7 +31,7 @@ def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
 
     assert np.isclose(fiber_1.alpha_dB_per_m , fiber_2.alpha_dB_per_m)
     assert fiber_1.use_self_steepening == fiber_2.use_self_steepening
-    assert fiber_1.ramanModel == fiber_2.ramanModel
+    assert fiber_1.raman_model == fiber_2.raman_model
     assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB)
     assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB)
     assert np.isclose(fiber_1.input_atten_dB , fiber_2.input_atten_dB)
@@ -336,7 +336,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         beta_list,
         alpha_test,
         use_self_steepening=True,
-        ramanModel=None,
+        raman_model=None,
         input_atten_dB=1,
         input_amp_dB=1.0,
         input_noise_factor_dB=-10,
@@ -352,7 +352,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         list(np.array(beta_list)/2),
         alpha_test/2,
         use_self_steepening=False,
-        ramanModel=None,
+        raman_model=None,
         input_atten_dB=1/2,
         input_amp_dB=1.0/2,
         input_noise_factor_dB=-10/2,
@@ -368,7 +368,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         list(np.array(beta_list)/3),
         alpha_test/3,
         use_self_steepening=True,
-        ramanModel=None,
+        raman_model=None,
         input_atten_dB=1/3,
         input_amp_dB=1.0/3,
         input_noise_factor_dB=-10/3,
@@ -929,7 +929,7 @@ def unit_test_self_steepening(show_plot_flag=False):
     alpha_test = 0
 
     number_of_steps = 2**9
-    testDuration = 0.1e-12/4/1.2171315338170257
+    testDuration = 2.0540097191959133e-14
     length_test = 8
     spanloss = alpha_test * length_test
 
@@ -955,7 +955,7 @@ def unit_test_self_steepening(show_plot_flag=False):
     testOrder = 1
     testNoiseAmplitude = 0
 
-    testAmplitude = 32.320897717179356/2*np.sqrt(1.25)/np.sqrt(2)
+    testAmplitude = 12.77595660095293
 
     test_input_signal = InputSignal(time_freq_test,
                                     testDuration,

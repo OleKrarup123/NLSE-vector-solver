@@ -17,7 +17,8 @@ Created on Fri Jan 26 14:26:22 2024
 
 from copy import deepcopy
 import os
-from typing import TextIO
+from dataclasses import dataclass, field
+from typing import TextIO, Callable
 from datetime import datetime
 import numpy as np
 import numpy.typing as npt
@@ -274,7 +275,9 @@ class ChannelClass:
         self.rightGap_Hz = self.channel_max_freq_Hz - self.signalMaxFreq_Hz
 
 
+@dataclass
 class TimeFreq:
+    #TODO: Redo docstring
     """
     Class for storing info about the time axis and frequency axis.
 
@@ -293,11 +296,23 @@ class TimeFreq:
         freq_step_Hz (float): Frequency resolution
     """
 
-    def __init__(self,
-                 number_of_points: int,
-                 time_step_s: float,
-                 center_frequency_Hz: float,
-                 describe_time_freq_flag = True):
+    #init
+    number_of_points: int
+    time_step_s: float
+    center_frequency_Hz: float
+    #post init
+    t: npt.NDArray[float] = field(init=False)
+    tmin: float = field(init=False)
+    tmax: float = field(init=False)
+
+    f: npt.NDArray[float] = field(init=False)
+    fmin: float = field(init=False)
+    fmax: float = field(init=False)
+
+    #default
+    describe_time_freq_flag: bool = True
+
+    def __post_init__(self):
         """
 
         Constructor for the TimeFreq class.
@@ -321,15 +336,13 @@ class TimeFreq:
 
         """
 
-        self.number_of_points = number_of_points
-        self.time_step_s = time_step_s
-        t = np.linspace(0, number_of_points *
-                        self.time_step_s, number_of_points)
+        t = np.linspace(0,
+                        self.number_of_points * self.time_step_s,
+                        self.number_of_points)
         self.t = t - np.mean(t)
         self.tmin = self.t[0]
         self.tmax = self.t[-1]
 
-        self.center_frequency_Hz = center_frequency_Hz
         self.f = get_freq_range_from_time(self.t)
         self.fmin = self.f[0]
         self.fmax = self.f[-1]
@@ -340,7 +353,7 @@ class TimeFreq:
         {np.min(self.center_frequency_Hz+self.f)/1e9:.3f}GHz is below 0.
         Consider increasing the center frequency!"""
 
-        if describe_time_freq_flag:
+        if self.describe_time_freq_flag:
             self.describe_config()
 
     def describe_config(self,
@@ -481,7 +494,8 @@ def get_photon_number(freq_Hz: npt.NDArray[float],
     """
 
     Delta_freq_Hz = freq_Hz[0]-freq_Hz[1]
-
+    fig,ax=plt.subplots()
+    ax.plot(freq_Hz)
     field_sum = np.sum(get_power(field_in_freq_domain)/freq_Hz)
 
 
@@ -1086,111 +1100,80 @@ def square_filter_power(freq, center_freq, width):
     return (1.0+0j)*np.exp(-0.5*((freq-center_freq)/width)**80)
 
 
+@dataclass
+class F:
+    a: float
+    c: float = field(init=False)
+    b: float = 1.2
+
+
+    def __post_init__(self):
+        self.c = self.a+self.b
+
+
+#TODO: Implement separate dataclass for input/output amp and attentuation of
+#      fiber span.
+# @dataclass
+# class FiberInputOutput:
+#     input_atten_dB: float = 0.0
+#     input_filter_power_function_pre_amp=None
+#     input_amp_dB: float = 0.0
+#     input_noise_factor_dB: float = -1e3
+#     input_filter_power_function_post_amp=None
+
+#     output_filter_power_function_pre_amp=None
+#     output_amp_dB: float = 0.0
+#     output_noise_factor_dB: float = -1e3
+#     output_filter_power_function_post_amp=None
+#     output_atten_dB: float = 0.0
+
+#     def __post_init__(self):
+#         pass
+
+@dataclass
 class FiberSpan:
     #TODO: Redo docstring
-    """
-    Class for storing info about a single fiber span.
 
-    Attributes:
-        Length (float): Length of fiber in [m]
-        number_of_steps (int): Number of identical steps
-                             the fiber is divided into
-        gamma (float): Nonlinearity parameter in [1/W/m]
-        beta_list (list): List of dispersion
-                          coefficients [beta2,beta3,...] [s^(entry+2)/m]
-        alpha_dB_per_m (float): Attenuation coeff in [dB/m]
-        alpha_Np_per_m (float): Attenuation coeff in [Np/m]
-        use_self_steepening (bool): Toggles self-steepening effect. Default is False
-        total_loss_dB (float):  Length*alpha_dB_per_m
-        output_amp_dB       (float): optional output amplification in dB
-        output_noise_factor_dB  (float): optional noise factor of amplifier in dB
-        input_atten_dB   (float): optional input attenuation in dB
-        output_atten_dB     (float): optional output attenuation in dB
-
-    """
-
-    def __init__(
-        self,
-        length_m: float,
-        number_of_steps: int,
-        gamma_per_W_per_m: float,
-        beta_list: list[float],
-        alpha_dB_per_m: float,
-        use_self_steepening: bool = False,
-        raman_model: str = "None",
-        input_atten_dB: float = 0.0,
-        input_amp_dB: float = 0.0,
-        input_noise_factor_dB: float = -1e3,
-        input_filter_power_function=None,
-        output_filter_power_function=None,
-        output_amp_dB: float = 0.0,
-        output_noise_factor_dB: float = -1e3,
-        output_atten_dB: float = 0.0,
-        describe_fiber_flag = True
-    ):
-        """
-        Constructor for FiberSpan
+    #init
+    length_m: float
+    number_of_steps: int
+    gamma_per_W_per_m: float
+    beta_list: list[float]
+    alpha_dB_per_m: float
+    #post init
+    z_array: npt.NDArray[float] = field(init=False)
+    dz: float = field(init=False)
+    alpha_Np_per_m: float = field(init=False)
+    raman_in_freq_domain_func: Callable[npt.NDArray[float],npt.NDArray[complex]] = field(init=False)
+    total_gainloss_dB: float = field(init=False)
+    #Defaults
+    use_self_steepening: bool = False
+    raman_model: str = "None"
+    fR: float = 0.0
+    tau1: float = 0.0
+    tau2: float = 0.0
+    input_atten_dB: float = 0.0
+    input_amp_dB: float = 0.0
+    input_noise_factor_dB: float = -1e3
+    input_filter_power_function=None
+    output_filter_power_function=None
+    output_amp_dB: float = 0.0
+    output_noise_factor_dB: float = -1e3
+    output_atten_dB: float = 0.0
+    describe_fiber_flag: bool = True
 
 
-        Parameters
-        ----------
-        L : float
-            Length of fiber in [m].
-        number_of_steps : int
-            Number of identical steps the fiber is divided into
-        gamma : float
-            Nonlinearity parameter in [1/W/m].
-        beta_list : list[float]
-            List of dispersion coefficients [beta2,beta3,...] [s^(entry+2)/m].
-        alpha_dB_per_m : float
-            Attenuation coeff in [dB/m].
-        raman_model : str, optional
-            String to select Raman model. Default, "None", indicates that Raman
-            should be ignored for this fiber.
-        input_amp_dB : float, optional
-            Input amplification of the power in dB. The default is 0.0.
-        input_noise_factor_dB : float, optional
-            Noise factor in dB of the input amplifier. The default is -1e3
-        input_atten_dB : float, optional
-            Input power attenuation of the fiber due to splicing or
-            misalignment. The default is 0.0.
-        input_filter_power_function : function, optional
-            Function describing spectrum of a filter to be applied to the
-            power at the fiber input. The default is None, which simply
-            multiplies the entire spectrum by 1.0.
-        output_amp_dB : float, optional
-            Output amplification of the power in dB. The default is 0.0.
-        output_noise_factor_dB : float, optional
-            Noise factor in dB of the output amplifier. The default is -1e3
-        output_atten_dB : float, optional
-            Output power attenuation of the fiber due to splicing or
-            misalignment. The default is 0.0.
-        output_filter_power_function : function, optional
-            Function describing spectrum of a filter to be applied to the
-            power at the fiber output. The default is None, which simply
-            multiplies the entire spectrum by 1.0.
-        describe_fiber_flag : Bool, optional
-            Toggles whether to print description of fiber.
-            The default is True.
 
-        Returns
-        -------
-        None.
+    def __post_init__(self):
 
-        """
-        self.length_m = float(length_m)
-        self.number_of_steps = int(number_of_steps)
+        self.number_of_steps = int(self.number_of_steps)
         self.z_array = np.linspace(0, self.length_m, self.number_of_steps + 1)
         self.dz = self.z_array[1] - self.z_array[0]
 
-        self.gamma_per_W_per_m = float(gamma_per_W_per_m)
-
         # Pad list of betas so we always have terms up to 8th order
-        while len(beta_list) <= 6:
-            beta_list.append(0.0)
-        self.beta_list = beta_list
-        self.alpha_dB_per_m = float(alpha_dB_per_m)
-        self.use_self_steepening = use_self_steepening
+        while len(self.beta_list) <= 6:
+            self.beta_list.append(0.0)
+
         # Loss coeff is usually specified in dB/km,
         # but Nepers/km is more useful for calculations
         self.alpha_Np_per_m = self.alpha_dB_per_m * np.log(10) / 10.0
@@ -1199,19 +1182,17 @@ class FiberSpan:
         # TODO: Make alpha frequency dependent.
 
         # TODO: Implement Raman model
-        # Default: No Raman effect
-        self.raman_model = raman_model
-        if str(raman_model).lower() == "none":
+        if str(self.raman_model).lower() == "none":
             self.raman_model = None
 
         self.fR = 0.0
         self.tau1 = 0.0
         self.tau2 = 0.0
 
-        self.RamanInFreqDomain_func = lambda freq: 0.0
+        self.raman_in_freq_domain_func = lambda freq: 0.0
 
         if self.raman_model is None:
-            self.RamanInFreqDomain_func = lambda freq: 0.0
+            self.raman_in_freq_domain_func = lambda freq: 0.0
 
         # Raman parameters taken from Govind P. Agrawal's book,
         # "Nonlinear Fiber Optics".
@@ -1226,40 +1207,32 @@ class FiberSpan:
             self.tau2 = 30.0 * 1e-15
 
             # Frequency domain representation of Raman response taken from https://github.com/omelchert/GNLStools/blob/main/src/GNLStools.py
-            self.RamanInFreqDomain_func = lambda freq: (
+            self.raman_in_freq_domain_func = lambda freq: (
                 self.tau1 ** 2 + self.tau2 ** 2
             ) / (
                 self.tau1 ** 2 * (1 - 1j * freq * 2 * pi * self.tau2) ** 2
                 + self.tau2 ** 2
             )  # Freq domain representation of Raman response
 
-        self.input_amp_dB = float(input_amp_dB)
-        self.input_noise_factor_dB = float(input_noise_factor_dB)
-        self.input_atten_dB = float(input_atten_dB)
 
-        if input_filter_power_function is None:
+
+        if self.input_filter_power_function is None:
             def no_filter(freq):
                 return (1+0j)*np.ones_like(freq)
             self.input_filter_power_function = no_filter
-        else:
-            self.input_filter_power_function = input_filter_power_function
 
-        self.output_amp_dB = float(output_amp_dB)
-        self.output_noise_factor_dB = float(output_noise_factor_dB)
-        self.output_atten_dB = float(output_atten_dB)
 
-        if output_filter_power_function is None:
+        if self.output_filter_power_function is None:
             def no_filter(freq):
                 return (1+0j)*np.ones_like(freq)
             self.output_filter_power_function = no_filter
-        else:
-            self.output_filter_power_function = output_filter_power_function
+
 
         self.total_gainloss_dB = (self.input_atten_dB+self.input_amp_dB
-                              +alpha_dB_per_m * self.length_m
+                              +self.alpha_dB_per_m * self.length_m
                               +self.output_amp_dB+self.output_atten_dB)
 
-        if describe_fiber_flag:
+        if self.describe_fiber_flag:
             self.describe_fiber()
 
     def describe_fiber(self, destination=None):
@@ -1315,6 +1288,7 @@ class FiberSpan:
 
 
 # Class for holding info about span of concatenated fibers.
+@dataclass
 class FiberLink:
     """
     Class for storing info about multiple concatenated fibers.
@@ -1323,18 +1297,21 @@ class FiberLink:
         fiber_list (list[FiberSpan]): List of FiberSpan objects
         number_of_fibers_in_span (int): Number of fibers concatenated together
     """
+    #init
+    fiber_list: list[FiberSpan]
+    #post init
+    number_of_fibers_in_span: int = field(init=False)
+    #defaults
 
-    def __init__(self, fiber_list: list[FiberSpan]):
+    def __post_init__(self):
         """
-        Constructor for the FiberLink
+        Post init for the FiberLink
 
         Parameters:
             self
-            fiber_list (list[FiberSpan]): List of FiberSpan objects
         """
 
-        self.fiber_list = fiber_list
-        self.number_of_fibers_in_span = len(fiber_list)
+        self.number_of_fibers_in_span = len(self.fiber_list)
 
     def get_total_loss_dB(self):
 
@@ -1516,49 +1493,49 @@ def load_fiber_link(path: str) -> FiberLink:
         fiber_list.append(current_fiber)
     return FiberLink(fiber_list)
 
-
+#TODO: Finish turning InputSignal into a dataclass
+@dataclass
 class InputSignal:
     # TODO: Redo docstring
 
-    """
-    Class for storing info about signal launched into a fiber link.
+    #Init
+    time_freq: TimeFreq
+    duration_s: float
+    amplitude_sqrt_W: float
+    pulse_type: str
+    #post init
+    pulse_field: npt.NDArray[complex] = field(init=False)
+    spectrum_field: npt.NDArray[complex] = field(init=False)
+    #defaults
+    time_offset_s: float = 0.0
+    freq_offset_Hz: float = 0.0
+    chirp: float = 0.0
+    order: float = 2.0
+    roll_off_factor: float = 0.0
+    noise_stdev_sqrt_W: float = 0.0
+    phase_rad: float = 0.0
+    FFT_tol: float = 1e-7
+    describe_input_signal_flag: bool = True
 
-    Attributes:
-        Amax (float): Amplitude of signal in [sqrt(W)]
-        Pmax (float): Peak power of signal in [W]
-        duration (float): Temporal duration of signal [s]
-        offset (float): Delay of signal relative to t=0 in [s]
-        chirp (float): Chirping factor of sigal
-        pulseType (str): Selects pulse type from a set of pre-defined ones.
-                         Select "custom" to define the signal manually
-        order (float): For n==1 and pulseType = "Gaussian" a regular Gaussian
-                     pulse is returned. For n>=1 return a super-Gaussian
-        noiseAmplitude (float): Amplitude of added white
-                                noise in units of [sqrt(W)].
-        timeFreq (TimeFreq): Contains info about discretized time and freq axes
-        pulse_field (npt.NDArray): Numpy array containing the signal
-                                 field over time in [sqrt(W)]
-        spectrum_field (npt.NDArray): Numpy array containing spectral field
-                                obtained from FFT of
-                                self.field in [sqrt(W)/Hz]
-    """
+    def __post_init__(self):
 
-    def __init__(
-        self,
-        time_freq: TimeFreq,
-        duration_s: float,
-        amplitude_sqrt_W: float,
-        pulse_type: str,
-        time_offset_s: float = 0.0,
-        freq_offset_Hz: float = 0.0,
-        chirp: float = 0.0,
-        order: float = 2.0,
-        roll_off_factor: float = 0.0,
-        noise_stdev_sqrt_W: float = 0.0,
-        phase_rad: float = 0.0,
-        FFT_tol=1e-7,
-        describe_input_signal_flag = True
-    ):
+
+
+        self.pulse_field = get_pulse(
+            self.time_freq.t,
+            self.duration_s,
+            self.time_offset_s,
+            self.amplitude_sqrt_W,
+            self.pulse_type,
+            self.freq_offset_Hz,
+            self.chirp,
+            self.order,
+            self.roll_off_factor,
+            self.noise_stdev_sqrt_W,
+            self.phase_rad
+        )
+        self.spectrum_field = 1j * np.zeros_like(self.pulse_field)
+
         # TODO: Redo docstring
         """
         Constructor for InputSignal
@@ -1588,53 +1565,47 @@ class InputSignal:
 
         """
 
-        self.time_freq = time_freq
-
-        # Store input params, so they can be saved to external .csv file
-        # and reloaded later
-        self.duration_s = duration_s
-        self.time_offset_s = time_offset_s
-        self.pulse_type = pulse_type
-        self.amplitude_sqrt_W = amplitude_sqrt_W
-        self.freq_offset_Hz = freq_offset_Hz
-        self.chirp = chirp
-        self.order = order
-        self.roll_off_factor = roll_off_factor
-        self.noise_stdev_sqrt_W = noise_stdev_sqrt_W
-        self.phase_rad = phase_rad
-
-        self.FFT_tol = FFT_tol
 
 
-        self.pulse_field = get_pulse(
-            self.time_freq.t,
-            self.duration_s,
-            self.time_offset_s,
-            self.amplitude_sqrt_W,
-            self.pulse_type,
-            self.freq_offset_Hz,
-            self.chirp,
-            self.order,
-            self.roll_off_factor,
-            self.noise_stdev_sqrt_W,
-            self.phase_rad
-        )
 
-        self.spectrum_field = 1j * np.zeros_like(self.pulse_field)
 
-        self.Pmax = 0.0
-        self.update_Pmax()
-        self.Amax = 0.0
-        self.update_Amax()
+
+
+
 
         if get_energy(self.time_freq.t, self.pulse_field) == 0.0:
             self.spectrum_field = np.copy(self.pulse_field)
         else:
             self.update_spectrum()
 
-        if describe_input_signal_flag:
+        if self.describe_input_signal_flag:
             self.describe_input_signal()
 
+
+    def get_peak_pulse_power(self) -> float:
+        """
+        Computes peak power of time domain signal.
+
+        Returns
+        -------
+        float
+            Power in time domain in units of W.
+
+        """
+        return np.max(get_power(self.pulse_field))
+
+
+    def get_peak_pulse_field(self) -> float:
+        """
+        Computes peak field strength of time domain signal.
+
+        Returns
+        -------
+        float
+            Field strength in time domain in units of sqrt(W).
+
+        """
+        return np.sqrt(np.max(get_power(self.pulse_field)))
 
     def update_spectrum(self):
         """
@@ -1652,32 +1623,9 @@ class InputSignal:
             self.pulse_field,
             FFT_tol=self.FFT_tol
         )
-        self.update_Pmax()
-        self.update_Amax()
 
-    def update_Pmax(self):
-        """
-        Updates the maximum power of signal. Useful if the amplitude is
-        modified when a custom signal is generated.
 
-        Returns
-        -------
-        None.
 
-        """
-        self.Pmax = np.max(get_power(self.pulse_field))
-
-    def update_Amax(self):
-        """
-        Updates the amplitude of signal. Useful if the field is
-        modified when a custom signal is generated.
-
-        Returns
-        -------
-        None.
-
-        """
-        self.Amax = np.sqrt(self.Pmax)
 
     def describe_input_signal(self, destination=None):
         """
@@ -1690,7 +1638,7 @@ class InputSignal:
         """
 
         print(" ### Input Signal Parameters ###", file=destination)
-        print(f"  Pmax   = {self.Pmax:.3f} W", file=destination)
+        print(f"  Pmax   = {self.get_peak_pulse_power():.3f} W", file=destination)
         print(
             f"  Duration  \t= {self.duration_s*1e12:.3f} ps",
             file=destination)
@@ -2105,7 +2053,7 @@ def describe_sim_parameters(
         Length_disp_array[i] = Length_disp
     if fiber.gamma_per_W_per_m != 0.0:
 
-        Length_NL = 1 / fiber.gamma_per_W_per_m / input_signal.Pmax
+        Length_NL = 1 / fiber.gamma_per_W_per_m / input_signal.get_peak_pulse_power()
         N_soliton = np.sqrt(Length_disp_array[0] / Length_NL)
         length_list = np.append(length_list, Length_NL)
 
@@ -2140,12 +2088,12 @@ def describe_sim_parameters(
 
         # https://prefetch.eu/know/concept/modulational-instability/
         f_MI = (
-            np.sqrt(2 * fiber.gamma_per_W_per_m * input_signal.Pmax /
+            np.sqrt(2 * fiber.gamma_per_W_per_m * input_signal.get_peak_pulse_power() /
                     np.abs(fiber.beta_list[0]))
             / 2
             / pi
         )
-        gain_MI = 2 * fiber.gamma_per_W_per_m * input_signal.Pmax
+        gain_MI = 2 * fiber.gamma_per_W_per_m * input_signal.get_peak_pulse_power()
         print(f"   Freq. w. max MI gain = {f_MI/1e9:.2e}GHz", file=destination)
         print(
             f"   Max MI gain  = {gain_MI*scalingfactor:.2e} /{prefix}m ",
@@ -2455,7 +2403,7 @@ def get_NL_factor_full(fiber: FiberSpan,
     t = timeFreq.t
 
     f0 = timeFreq.center_frequency_Hz
-    RamanInFreqDomain = fiber.RamanInFreqDomain_func(freq)
+    RamanInFreqDomain = fiber.raman_in_freq_domain_func(freq)
 
     def NR_func(current_pulse):
         return (1 - fR) * get_power(
@@ -3690,6 +3638,15 @@ def plot_photon_number(ssfm_result_list: list[SSFMResult]):
 
     f = -timeFreq.f+center_freq_Hz  # Minus must be included here due to -i*omega*t sign convention
 
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(timeFreq.f)
+    ax.plot(-timeFreq.f)
+    plt.show()
+
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(f)
+    plt.show()
+
 
     for i, spectrum in enumerate(spectrum_matrix):
 
@@ -4569,6 +4526,15 @@ if __name__ == "__main__":
         beta_list,
         alpha_test,
         use_self_steepening=False)
+
+    fiber_test2 = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening=False)
+
 
     fiber_list = [fiber_test]  # ,fiber_test_2
     fiber_link = FiberLink(fiber_list)
