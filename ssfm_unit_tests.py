@@ -20,24 +20,24 @@ def compare_fiber_links(fiber_link_1: FiberLink,fiber_link_2: FiberLink):
     return True
 
 def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
-    assert np.isclose(fiber_1.length_m, fiber_2.length_m)
+    assert np.isclose(fiber_1.length_m, fiber_2.length_m,rtol=1e-6,atol=1e-100)
     assert fiber_1.number_of_steps == fiber_2.number_of_steps
 
 
-    assert np.isclose(fiber_1.gamma_per_W_per_m, fiber_2.gamma_per_W_per_m)
+    assert np.isclose(fiber_1.gamma_per_W_per_m, fiber_2.gamma_per_W_per_m,rtol=1e-6,atol=1e-100)
 
     for beta_n_1, beta_n_2 in zip(fiber_1.beta_list, fiber_2.beta_list):
         assert np.isclose(beta_n_1,beta_n_2)
 
-    assert np.isclose(fiber_1.alpha_dB_per_m , fiber_2.alpha_dB_per_m)
+    assert np.isclose(fiber_1.alpha_dB_per_m , fiber_2.alpha_dB_per_m,rtol=1e-6,atol=1e-100)
     assert fiber_1.use_self_steepening == fiber_2.use_self_steepening
     assert fiber_1.raman_model == fiber_2.raman_model
-    assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB)
-    assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB)
-    assert np.isclose(fiber_1.input_atten_dB , fiber_2.input_atten_dB)
-    assert np.isclose(fiber_1.output_amp_dB , fiber_2.output_amp_dB)
-    assert np.isclose(fiber_1.output_noise_factor_dB , fiber_2.output_noise_factor_dB)
-    assert np.isclose(fiber_1.output_atten_dB , fiber_2.output_atten_dB)
+    assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB,rtol=1e-6,atol=1e-100)
+    assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB,rtol=1e-6,atol=1e-100)
+    assert np.isclose(fiber_1.input_atten_dB , fiber_2.input_atten_dB,rtol=1e-6,atol=1e-100)
+    assert np.isclose(fiber_1.output_amp_dB , fiber_2.output_amp_dB,rtol=1e-6,atol=1e-100)
+    assert np.isclose(fiber_1.output_noise_factor_dB , fiber_2.output_noise_factor_dB,rtol=1e-6,atol=1e-100)
+    assert np.isclose(fiber_1.output_atten_dB , fiber_2.output_atten_dB,rtol=1e-6,atol=1e-100)
 
     return True
 
@@ -138,7 +138,7 @@ def self_steepening_pulse(time_freq: TimeFreq,
     w0 = time_freq.center_frequency_Hz*2*np.pi
     s=1/w0/duration_s
 
-    tau = time_freq.t/duration_s
+    tau = time_freq.t_s/duration_s
     P_max = amplitude_sqrt_W**2
     L_NL = 1/gamma_per_W_m/P_max
 
@@ -266,7 +266,7 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
 
     time_freq_loaded = load_TimeFreq(ssfm_result_list[0].dirs[1])
 
-    assert len(time_freq_loaded.t)==N, f"""ERROR: {len(time_freq_loaded.t) = }
+    assert len(time_freq_loaded.t_s)==N, f"""ERROR: {len(time_freq_loaded.t) = }
     but {N = }!!!"""
     assert time_freq_loaded.time_step_s==dt, f"""ERROR: {time_freq_loaded.time_step_s = }
     but {dt = }!!!"""
@@ -428,7 +428,7 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
     """
     print("  ")
     print("Doing unit test for saving/loading InputSignal only!")
-
+    np.random.seed(123)
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
     N = 2 ** 15  # Number of points
@@ -626,7 +626,7 @@ def unit_test_beta2(show_plot_flag=False):
         FFT_tol=test_FFT_tol
     )
     final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
-    theoretical_final_pulse = gaussian_pulse_with_beta_2_only(time_freq_test.t,
+    theoretical_final_pulse = gaussian_pulse_with_beta_2_only(time_freq_test.t_s,
                                     test_duration_s,
                                     test_amplitude, beta_list[0],
                                     length_test)
@@ -723,7 +723,7 @@ def unit_test_beta3(show_plot_flag=False):
                                     FFT_tol=test_FFT_tol,
                                     describe_input_signal_flag=False)
 
-    theoretical_final_pulse = gaussian_pulse_with_beta_3_only(time_freq_test.t,
+    theoretical_final_pulse = gaussian_pulse_with_beta_3_only(time_freq_test.t_s,
                                     test_duration_s,
                                     test_amplitude, beta_list[1],
                                     length_test)
@@ -773,6 +773,7 @@ def unit_test_beta3(show_plot_flag=False):
 def unit_tests_nonlinear(show_plot_flag=False):
     unit_test_SPM(show_plot_flag)
     unit_test_self_steepening(show_plot_flag)
+    unit_test_photon_number_conservation_no_raman(show_plot_flag)
 
 def unit_test_SPM(show_plot_flag=False):
     print("  ")
@@ -1020,6 +1021,101 @@ def unit_test_self_steepening(show_plot_flag=False):
 
     print("Unit test for dispersion with self-steepening only SUCCEEDED!")
     print("  ")
+
+
+def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
+    """
+    Unit test comparing the "photon number" before and after a fiber without
+    attenuation or gain. This should be conserved!
+
+    Parameters
+    ----------
+    show_plot_flag : Bool, optional
+        Flag to toggle shoing graph comparing theoretical to numerical results.
+        The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    print("  ")
+    print("Doing unit test for photon number conservation with no Raman!")
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+    N = 2 ** 14  # Number of points
+    dt = 100e-15  # Time resolution [s]
+
+    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(N,
+                              dt,
+                              center_freq_test,
+                              describe_time_freq_flag=False)
+
+    # Set up signal
+    test_FFT_tol = 1e-3
+    test_amplitude = 10.0
+    test_pulse_type = "gaussian"
+    test_amplitude = 0.25
+    test_duration_s = 12e-12
+
+    alpha_test = 0#-0.22/1e3  # dB/m
+    beta_list = [-10.66e-26,10.66e-36,-10.66e-46]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 1e-2  # 1/W/m
+    length_test = 12e3  # m
+    number_of_steps = 2**9
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening=False,
+        describe_fiber_flag=False)
+
+
+
+
+    fiber_list = [fiber_test]  # ,fiber_test_2
+    fiber_link = FiberLink(fiber_list)
+
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude,
+                                    test_pulse_type,
+                                    FFT_tol=test_FFT_tol,
+                                    describe_input_signal_flag=False)
+
+    f = -time_freq_test.f_Hz+center_freq_test
+
+    initial_photon_number = get_photon_number(f,
+                                        test_input_signal.spectrum_field.reshape(1,-1))[-1]
+
+
+
+
+    exp_name = f"photon_number_test"
+    # Run SSFM
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=False,
+        experiment_name=exp_name,
+        FFT_tol=test_FFT_tol
+    )
+
+    final_photon_number = get_photon_number(f,
+                                            ssfm_result_list[-1].spectrum_field_matrix)[-1]
+    assert np.isclose(initial_photon_number ,
+                      final_photon_number,
+                      rtol=4e-8,
+                      atol=1e-100), f"""ERROR: {initial_photon_number = } but
+    {final_photon_number = }. Should be conserved when gain/loss = 0.0 !"""
+    print("Unit test for photon number conservation without Raman SUCCEEDED!")
+    print("  ")
+
 
 
 if __name__ == "__main__":

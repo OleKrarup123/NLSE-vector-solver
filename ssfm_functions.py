@@ -62,7 +62,6 @@ PULSE_TYPE_LIST = ["random",
                    "custom"]
 
 
-np.random.seed(123456)
 
 
 
@@ -146,8 +145,8 @@ def get_chirp(time_s: npt.NDArray[float],
     chirp = -1.0/2/pi*np.gradient(phi, time_s)
     return chirp
 
-
-class ChannelClass:
+@dataclass
+class Channel:
     """
     Class for storing info about a certain frequency channel.
 
@@ -158,7 +157,7 @@ class ChannelClass:
             Lower frequency of channel.
         self.channel_max_freq_Hz : float
             Upper frequency of channel.
-        self.channelWidth_Hz : float
+        self.channel_width_Hz : float
             Full channel width.
 
 
@@ -166,30 +165,37 @@ class ChannelClass:
             Central frequency of signal.
         self.signal_bw_Hz : float
             Signal Bandwidth.
-        self.signalMinFreq_Hz : float
+        self.signal_min_freq_Hz : float
             Lower frequency of the signal in the channel.
-        self.signalMaxFreq_Hz : float
+        self.signal_max_freq_Hz : float
             Upper frequency of the signal in the channel.
 
-        self.leftGap_Hz : float
+        self.left_gap_Hz : float
             Frequency gap between lowest channel freq and lowest signal freq
 
-        self.rightGap_Hz : float
+        self.right_gap_Hz : float
             Frequency gap between upper signal freq and upper channel freq
 
     """
 
-    def __init__(
-        self,
-        channel_center_freq_Hz: float,
-        channel_min_freq_Hz: float,
-        channel_max_freq_Hz: float,
-        signal_center_freq_Hz: float,
-        signal_bw_Hz: float,
-    ):
+    channel_center_freq_Hz: float
+    channel_min_freq_Hz: float
+    channel_max_freq_Hz: float
+    signal_center_freq_Hz: float
+    signal_bw_Hz: float
+
+    channel_width_Hz: float = field(init=False)
+    signal_min_freq_Hz: float = field(init=False)
+    signal_max_freq_Hz: float = field(init=False)
+    left_gap_Hz: float = field(init=False)
+    right_gap_Hz: float = field(init=False)
+
+    def __post_init__(self):
         """
 
-        Illustration of ChannelClass
+        Illustration of Channel
+
+                <---sig_BW--->
 
                     sig_c
                        .
@@ -207,6 +213,8 @@ class ChannelClass:
          |       *  |  .     * |
         _|_______*__|__._____*_|_______ ->f
     ch_min        ch_cen      ch_max
+
+         <--lg-->           <rg>
 
         Parameters
         ----------
@@ -229,50 +237,45 @@ class ChannelClass:
 
         # Quick sanity check that center frequency is between min and max
         assert (
-            channel_min_freq_Hz < channel_max_freq_Hz
+            self.channel_min_freq_Hz < self.channel_max_freq_Hz
         ), "Error: channel_min_freq_Hz must be smaller than"
-        f" channel_max_freq_Hz, but {channel_min_freq_Hz =}"
-        f" >= {channel_max_freq_Hz =}"
+        f" channel_max_freq_Hz, but {self.channel_min_freq_Hz =}"
+        f" >= {self.channel_max_freq_Hz =}"
         assert (
-            channel_center_freq_Hz < channel_max_freq_Hz
+            self.channel_center_freq_Hz < self.channel_max_freq_Hz
         ), "Error: channel_center_freq_Hz must be smaller than"
-        " channel_max_freq_Hz, but {channel_center_freq_Hz = }"
-        ">= {channel_max_freq_Hz = }"
+        " channel_max_freq_Hz, but {self.channel_center_freq_Hz = }"
+        ">= {self.channel_max_freq_Hz = }"
         assert (
-            channel_min_freq_Hz < channel_center_freq_Hz
+            self.channel_min_freq_Hz < self.channel_center_freq_Hz
         ), "Error: channel_min_freq_Hz must be smaller than"
-        " center_frequency_Hz, but {channel_min_freq_Hz = }"
-        " >= {channel_center_freq_Hz = }"
+        " center_frequency_Hz, but {self.channel_min_freq_Hz = }"
+        " >= {self.channel_center_freq_Hz = }"
 
-        self.channel_center_freq_Hz = channel_center_freq_Hz
-        self.channel_min_freq_Hz = channel_min_freq_Hz
-        self.channel_max_freq_Hz = channel_max_freq_Hz
-        self.channelWidth_Hz = self.channel_max_freq_Hz - self.channel_min_freq_Hz
+        self.channel_width_Hz = self.channel_max_freq_Hz - self.channel_min_freq_Hz
 
-        self.signal_center_freq_Hz = signal_center_freq_Hz
-        self.signal_bw_Hz = signal_bw_Hz
-        self.signalMinFreq_Hz = (self.signal_center_freq_Hz -
+        self.signal_min_freq_Hz = (self.signal_center_freq_Hz -
                                  0.5 * self.signal_bw_Hz)
-        self.signalMaxFreq_Hz = (self.signal_center_freq_Hz +
+        self.signal_max_freq_Hz = (self.signal_center_freq_Hz +
                                  0.5 * self.signal_bw_Hz)
 
         # Quick sanity checks to ensure that signal is fully inside channel.
         # May seem pedantic, but making mistakes when allocating channels is
         # very easy!
         assert (
-            signal_bw_Hz > 0
-        ), f"Error: {signal_bw_Hz =} but should be greater than zero! "
+            self.signal_bw_Hz > 0
+        ), f"Error: {self.signal_bw_Hz =} but should be greater than zero! "
         assert (
-            channel_min_freq_Hz <= self.signalMinFreq_Hz
-        ), "Error: channel_min_freq_Hz    must be smaller than signalMinFreq_Hz"
-        ", but {channel_min_freq_Hz = }>{self.signalMinFreq_Hz = }."
+            self.channel_min_freq_Hz <= self.signal_min_freq_Hz
+        ), "Error: channel_min_freq_Hz    must be smaller than signal_min_freq_Hz"
+        ", but {self.channel_min_freq_Hz = }>{self.self.signal_min_freq_Hz = }."
         assert (
-            channel_max_freq_Hz >= self.signalMaxFreq_Hz
-        ), "Error: channel_max_freq_Hz must be greater than signalMaxFreq_Hz,"
-        " but {channel_max_freq_Hz = } < {self.signalMaxFreq_Hz = }."
+            self.channel_max_freq_Hz >= self.signal_max_freq_Hz
+        ), "Error: channel_max_freq_Hz must be greater than signal_max_freq_Hz,"
+        " but {self.channel_max_freq_Hz = } < {self.signal_max_freq_Hz = }."
 
-        self.leftGap_Hz = self.signalMinFreq_Hz - self.channel_min_freq_Hz
-        self.rightGap_Hz = self.channel_max_freq_Hz - self.signalMaxFreq_Hz
+        self.left_gap_Hz = self.signal_min_freq_Hz - self.channel_min_freq_Hz
+        self.right_gap_Hz = self.channel_max_freq_Hz - self.signal_max_freq_Hz
 
 
 @dataclass
@@ -285,14 +288,14 @@ class TimeFreq:
         number_of_points (int): Number of time points
         time_step (float): Duration of each time step
         t (npt.NDArray[float]): Array containing all the time points
-        tmin (float): First entry in time array
-        tmax (float): Last entry in time array
+        t_min_s (float): First entry in time array
+        t_max_s (float): Last entry in time array
 
         center_frequency_Hz (float): Central optical frequency
         f (npt.NDArray[float]): Frequency range (relative to center_frequency_Hz)
                      corresponding to t when FFT is taken
-        fmin (float): Lowest (most negative) frequency component
-        fmax (float): Highest (most positive) frequency component
+        f_min_Hz (float): Lowest (most negative) frequency component
+        f_max_Hz (float): Highest (most positive) frequency component
         freq_step_Hz (float): Frequency resolution
     """
 
@@ -301,13 +304,13 @@ class TimeFreq:
     time_step_s: float
     center_frequency_Hz: float
     #post init
-    t: npt.NDArray[float] = field(init=False)
-    tmin: float = field(init=False)
-    tmax: float = field(init=False)
+    t_s: npt.NDArray[float] = field(init=False)
+    t_min_s: float = field(init=False)
+    t_max_s: float = field(init=False)
 
-    f: npt.NDArray[float] = field(init=False)
-    fmin: float = field(init=False)
-    fmax: float = field(init=False)
+    f_Hz: npt.NDArray[float] = field(init=False)
+    f_min_Hz: float = field(init=False)
+    f_max_Hz: float = field(init=False)
 
     #default
     describe_time_freq_flag: bool = True
@@ -336,21 +339,21 @@ class TimeFreq:
 
         """
 
-        t = np.linspace(0,
-                        self.number_of_points * self.time_step_s,
-                        self.number_of_points)
-        self.t = t - np.mean(t)
-        self.tmin = self.t[0]
-        self.tmax = self.t[-1]
+        t_s = np.linspace(0,
+                          self.number_of_points * self.time_step_s,
+                          self.number_of_points)
+        self.t_s = t_s - np.mean(t_s)
+        self.t_min_s = self.t_s[0]
+        self.t_max_s = self.t_s[-1]
 
-        self.f = get_freq_range_from_time(self.t)
-        self.fmin = self.f[0]
-        self.fmax = self.f[-1]
-        self.freq_step_Hz = self.f[1] - self.f[0]
+        self.f_Hz = get_freq_range_from_time(self.t_s)
+        self.f_min_Hz = self.f_Hz[0]
+        self.f_max_Hz = self.f_Hz[-1]
+        self.freq_step_Hz = self.f_Hz[1] - self.f_Hz[0]
 
         assert np.min(self.center_frequency_Hz +
-                      self.f) >= 0, f"""ERROR! Lowest frequency of
-        {np.min(self.center_frequency_Hz+self.f)/1e9:.3f}GHz is below 0.
+                      self.f_Hz) >= 0, f"""ERROR! Lowest frequency of
+        {np.min(self.center_frequency_Hz+self.f_Hz)/1e9:.3f}GHz is below 0.
         Consider increasing the center frequency!"""
 
         if self.describe_time_freq_flag:
@@ -379,8 +382,8 @@ class TimeFreq:
         print(
             f"Number of points\t = {self.number_of_points:>10}", file=d)
         print(
-            f"Start time, tmin\t = {self.tmin*1e12:>10.3f}ps", file=d)
-        print(f"Stop time, tmax\t\t = {self.tmax*1e12:>10.3f}ps", file=d)
+            f"Start time, t_min_s\t = {self.t_min_s*1e12:>10.3f}ps", file=d)
+        print(f"Stop time, t_max_s\t\t = {self.t_max_s*1e12:>10.3f}ps", file=d)
         print(
             f"Time resolution\t\t = {self.time_step_s*1e12:>10.3f}ps",
             file=d)
@@ -391,9 +394,9 @@ class TimeFreq:
             file=d,
         )
         print(
-            f"Start frequency\t\t = {self.fmin/1e12:>10.3f}THz", file=d)
+            f"Start frequency\t\t = {self.f_min_Hz/1e12:>10.3f}THz", file=d)
         print(
-            f"Stop frequency\t\t = {self.fmax/1e12:>10.3f}THz", file=d)
+            f"Stop frequency\t\t = {self.f_max_Hz/1e12:>10.3f}THz", file=d)
         print(
             f"Frequency resolution = {self.freq_step_Hz/1e6:>10.3f}MHz",
             file=d,
@@ -432,7 +435,7 @@ def load_TimeFreq(path: str) -> TimeFreq:
         path (str): Path to previous run
 
     Returns:
-        TimeFreq: TimeFreq used in previous run.
+        time_freq: TimeFreq used in previous run.
 
     """
     path_to_saved_timeFreq = os.path.join(path)
@@ -493,13 +496,13 @@ def get_photon_number(freq_Hz: npt.NDArray[float],
     Number of photons in the spectrum as a float.
     """
 
-    Delta_freq_Hz = freq_Hz[0]-freq_Hz[1]
-    fig,ax=plt.subplots()
-    ax.plot(freq_Hz)
-    field_sum = np.sum(get_power(field_in_freq_domain)/freq_Hz)
+    delta_freq_Hz = freq_Hz[0]-freq_Hz[1]
+
+    field_sum = np.sum(get_power(field_in_freq_domain)/freq_Hz,axis=1)
 
 
-    return field_sum/(PLANCKCONST_J_PER_HZ*Delta_freq_Hz)
+
+    return field_sum/(PLANCKCONST_J_PER_HZ*delta_freq_Hz)
 
 
 
@@ -1522,7 +1525,7 @@ class InputSignal:
 
 
         self.pulse_field = get_pulse(
-            self.time_freq.t,
+            self.time_freq.t_s,
             self.duration_s,
             self.time_offset_s,
             self.amplitude_sqrt_W,
@@ -1573,7 +1576,7 @@ class InputSignal:
 
 
 
-        if get_energy(self.time_freq.t, self.pulse_field) == 0.0:
+        if get_energy(self.time_freq.t_s, self.pulse_field) == 0.0:
             self.spectrum_field = np.copy(self.pulse_field)
         else:
             self.update_spectrum()
@@ -1619,7 +1622,7 @@ class InputSignal:
 
         """
         self.spectrum_field = get_spectrum_from_pulse(
-            self.time_freq.t,
+            self.time_freq.t_s,
             self.pulse_field,
             FFT_tol=self.FFT_tol
         )
@@ -1660,10 +1663,10 @@ class InputSignal:
 
         print("   ", file=destination)
 
-        scalingFactor, prefix = get_units(self.time_freq.t[-1])
+        scalingFactor, prefix = get_units(self.time_freq.t_s[-1])
         fig, ax = plt.subplots(dpi=300)
         ax.set_title(f'Input signal for {self.pulse_type} in time domain')
-        ax.plot(self.time_freq.t/scalingFactor,
+        ax.plot(self.time_freq.t_s/scalingFactor,
                 get_power(self.pulse_field), '.')
         ax.set_xlabel(f'Time [{prefix}s]')
         ax.set_ylabel('Power [W]')
@@ -1676,10 +1679,10 @@ class InputSignal:
 
 
 
-        scalingFactor, prefix = get_units(self.time_freq.f[-1])
+        scalingFactor, prefix = get_units(self.time_freq.f_Hz[-1])
         fig, ax = plt.subplots(dpi=300)
         ax.set_title(f'Input signal for {self.pulse_type} in freq domain')
-        ax.plot(-self.time_freq.f/scalingFactor,
+        ax.plot(-self.time_freq.f_Hz/scalingFactor,
                 get_power(self.spectrum_field), '.')
         ax.set_xlabel(f'Freq [{prefix}Hz]')
         ax.set_ylabel('Energy dens. [J/Hz]')
@@ -1710,7 +1713,7 @@ class InputSignal:
                          "field_sqrt_W_imag"]
             )
 
-            custom_input_df["time_s"] = self.time_freq.t
+            custom_input_df["time_s"] = self.time_freq.t_s
             custom_input_df["field_sqrt_W_real"] = np.real(self.pulse_field)
             custom_input_df["field_sqrt_W_imag"] = np.imag(self.pulse_field)
 
@@ -1788,12 +1791,12 @@ def load_input_signal(path: str) -> InputSignal:
 
 
         # Load timeFreq
-        old_timefreq = load_TimeFreq(path)
+        old_time_freq = load_TimeFreq(path)
 
 
         # Initialize class for loaded signal
         loaded_input_signal = InputSignal(
-            old_timefreq,
+            old_time_freq,
             duration_s,
             amplitude_sqrt_W,
             pulse_type,
@@ -1818,13 +1821,13 @@ def load_input_signal(path: str) -> InputSignal:
         A_imag = np.array(df["field_sqrt_W_imag"])
         A = A_real + 1j * A_imag
 
-        old_timefreq = load_TimeFreq(path)
+        old_time_freq = load_TimeFreq(path)
 
-        A_spectrum = get_spectrum_from_pulse(old_timefreq.t, A)
+        A_spectrum = get_spectrum_from_pulse(old_time_freq.t_s, A)
 
         loaded_input_signal = InputSignal(
-            old_timefreq,
-            get_stdev(old_timefreq.t, A),
+            old_time_freq,
+            get_stdev(old_time_freq.t_s, A),
             np.sqrt(np.max(get_power(A))),
             "custom",
             describe_input_signal_flag=False,
@@ -2327,7 +2330,7 @@ def load_previous_run(basePath: str) -> [FiberLink, InputSignal]:
 
 
 def get_NL_factor_simple(fiber: FiberSpan,
-                         timeFreq: TimeFreq,
+                         time_freq: TimeFreq,
                          pulse: npt.NDArray[complex],
                          dz_m: float) -> npt.NDArray[complex]:
     """
@@ -2357,7 +2360,7 @@ def get_NL_factor_simple(fiber: FiberSpan,
 
 
 def get_NL_factor_self_steepening(fiber: FiberSpan,
-                                  timeFreq: TimeFreq,
+                                  time_freq: TimeFreq,
                                   pulse: npt.NDArray[complex],
                                   dz_m: float) -> npt.NDArray[complex]:
     """
@@ -2386,23 +2389,24 @@ def get_NL_factor_self_steepening(fiber: FiberSpan,
 
     """
     pulse_power = get_power(pulse)
-    output = np.exp(1j * fiber.gamma_per_W_per_m*(pulse_power+1j/2/np.pi/timeFreq.center_frequency_Hz /
-                    (pulse+np.sqrt(np.max(pulse_power))/1e6*(1+0j))*np.gradient(pulse_power*pulse, timeFreq.t)) * dz_m)
+    output = np.exp(1j * fiber.gamma_per_W_per_m*(pulse_power+1j/2/np.pi/time_freq.center_frequency_Hz /
+                    (pulse+np.sqrt(np.max(pulse_power))/1e6*(1+0j))*np.gradient(pulse_power*pulse, time_freq.t_s)) * dz_m)
 
     return output
 
 
 # TODO: Fully implement Raman model
 def get_NL_factor_full(fiber: FiberSpan,
-                       timeFreq: TimeFreq,
+                       time_freq: TimeFreq,
                        pulse: npt.NDArray[complex],
                        dz_m: float) -> npt.NDArray[complex]:
     # TODO: Implement Raman effect for both long and short-duration pulses
     fR = fiber.fR
-    freq = timeFreq.f
-    t = timeFreq.t
+    freq = time_freq.f_Hz
+    t = time_freq.t_s
 
-    f0 = timeFreq.center_frequency_Hz
+
+    f0 = time_freq.center_frequency_Hz
     RamanInFreqDomain = fiber.raman_in_freq_domain_func(freq)
 
     def NR_func(current_pulse):
@@ -2418,7 +2422,7 @@ def get_NL_factor_full(fiber: FiberSpan,
         * dz_m
         * fiber.gamma_per_W_per_m
         * (1.0 + freq / f0)
-        * get_pulse_from_spectrum(freq, NR_func(get_spectrum_from_pulse(timeFreq.t, pulse)))
+        * get_pulse_from_spectrum(freq, NR_func(get_spectrum_from_pulse(time_freq.t_s, pulse)))
     )
 
     return np.exp(get_pulse_from_spectrum(freq, NR_in_freq_domain))
@@ -2501,9 +2505,9 @@ def SSFM(
     """
     print("########### Initializing SSFM!!! ###########")
 
-    t = input_signal.time_freq.t
-    # dt = input_signal.time_freq.time_step_s
-    f = input_signal.time_freq.f
+    t = input_signal.time_freq.t_s
+    # dt = input_signal.time_freq.t_sime_step_s
+    f = input_signal.time_freq.f_Hz
     df = input_signal.time_freq.freq_step_Hz
     fc = input_signal.time_freq.center_frequency_Hz
 
@@ -2564,7 +2568,7 @@ def SSFM(
         os.chdir(current_dir)
 
         # Pre-calculate dispersion term
-        dispterm = np.zeros_like(input_signal.time_freq.f) * 1.0
+        dispterm = np.zeros_like(input_signal.time_freq.f_Hz) * 1.0
         for idx, beta_n in enumerate(fiber.beta_list):
             n = idx + 2  # Note: zeroth entry in beta_list is beta2
             # Minus must be included for f due to -i*omega*t sign convention
@@ -2615,7 +2619,7 @@ def SSFM(
         # Initialize arrays to store temporal profile
         initial_pulse = np.copy(current_input_signal.pulse_field)
         initial_spectrum = get_spectrum_from_pulse(
-            current_input_signal.time_freq.t,
+            current_input_signal.time_freq.t_s,
             current_input_signal.pulse_field,
             FFT_tol=FFT_tol,
         )
@@ -2623,7 +2627,7 @@ def SSFM(
         # as well as dispersion half-step
         spectrum = (
             get_spectrum_from_pulse(
-                current_input_signal.time_freq.t,
+                current_input_signal.time_freq.t_s,
                 current_input_signal.pulse_field,
                 FFT_tol=FFT_tol,
             ) * inputAttenuationField_lin*input_amp_field_factor+input_noise_ASE_array
@@ -2633,7 +2637,7 @@ def SSFM(
         spectrum *= np.sqrt(fiber.input_filter_power_function(-f+fc))
 
         pulse = get_pulse_from_spectrum(
-            input_signal.time_freq.f, spectrum, FFT_tol=FFT_tol)
+            input_signal.time_freq.f_Hz, spectrum, FFT_tol=FFT_tol)
 
         #
         # Start loop
@@ -2810,12 +2814,12 @@ def unpack_matrix(ssfm_result_list: list[SSFMResult],
         npt.NDArray: Array of size (n_z_steps,n_time_steps) describing pulse field or spectrum field for whole fiber span.
 
     """
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
     number_of_fibers = len(ssfm_result_list)
 
     # print(f"number_of_fibers = {number_of_fibers}")
 
-    matrix = np.zeros((len(zvals), len(timeFreq.t))) * (1 + 0j)
+    matrix = np.zeros((len(zvals), len(time_freq.t_s))) * (1 + 0j)
 
     starting_row = 0
 
@@ -2879,17 +2883,17 @@ def plot_first_and_last_pulse(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
 
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
 
     zvals = unpack_Zvals(ssfm_result_list)
 
-    t = timeFreq.t[Nmin:Nmax] * 1e12
+    t = time_freq.t_s[Nmin:Nmax] * 1e12
 
     P_initial = get_power(ssfm_result_list[0].pulse_matrix[0, Nmin:Nmax])
     P_final = get_power(ssfm_result_list[-1].pulse_matrix[-1, Nmin:Nmax])
@@ -2950,12 +2954,12 @@ def plot_pulse_matrix_2D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
 
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
 
     zvals = unpack_Zvals(ssfm_result_list)
@@ -2966,7 +2970,7 @@ def plot_pulse_matrix_2D(ssfm_result_list: list[SSFMResult],
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(dpi=300)
     ax.set_title("Pulse Evolution (dB scale)")
-    t_ps = timeFreq.t[Nmin:Nmax] * 1e12
+    t_ps = time_freq.t_s[Nmin:Nmax] * 1e12
     z = zvals
     T_ps, Z = np.meshgrid(t_ps, z)
     P = get_power(matrix[:, Nmin:Nmax]) / \
@@ -3008,12 +3012,12 @@ def plot_pulse_matrix_3D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
 
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
 
     zvals = unpack_Zvals(ssfm_result_list)
@@ -3026,7 +3030,7 @@ def plot_pulse_matrix_3D(ssfm_result_list: list[SSFMResult],
     fig.patch.set_facecolor('white')
     plt.title("Pulse Evolution (dB scale)")
 
-    t = timeFreq.t[Nmin:Nmax] * 1e12
+    t = time_freq.t_s[Nmin:Nmax] * 1e12
     z = zvals
     T_surf, Z_surf = np.meshgrid(t, z)
     P_surf = get_power(matrix[:, Nmin:Nmax]) / \
@@ -3067,7 +3071,7 @@ def plot_pulse_chirp_2D(ssfm_result_list: list[SSFMResult],
     dB_cutoff : float
         Lowest y-value in plot is this many dB smaller than the peak power.
     **kwargs : TYPE
-        If chirpPlotRange=(fmin,fmax) is contained in **kwargs, use these
+        If chirpPlotRange=(f_min_Hz,f_max_Hz) is contained in **kwargs, use these
         values to set color scale.
 
     Returns
@@ -3076,12 +3080,12 @@ def plot_pulse_chirp_2D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
 
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
 
     zvals = unpack_Zvals(ssfm_result_list)
@@ -3092,7 +3096,7 @@ def plot_pulse_chirp_2D(ssfm_result_list: list[SSFMResult],
     fig, ax = plt.subplots(dpi=300)
     fig.patch.set_facecolor('white')
     ax.set_title("Pulse Chirp Evolution")
-    t = timeFreq.t[Nmin:Nmax] * 1e12
+    t = time_freq.t_s[Nmin:Nmax] * 1e12
     z = zvals
     T, Z = np.meshgrid(t, z)
 
@@ -3107,8 +3111,8 @@ def plot_pulse_chirp_2D(ssfm_result_list: list[SSFMResult],
             Cmatrix[Cmatrix > value[1]] = value[1]
             chirpplotrange_set_flag = True
     if chirpplotrange_set_flag is False:
-        Cmatrix[Cmatrix < -50] = -50  # Default fmin = -50GHz
-        Cmatrix[Cmatrix > 50] = 50  # Default fmax = -50GHz
+        Cmatrix[Cmatrix < -50] = -50  # Default f_min_Hz = -50GHz
+        Cmatrix[Cmatrix > 50] = 50  # Default f_max_Hz = -50GHz
     surf = ax.contourf(T, Z, Cmatrix, levels=40, cmap="RdBu")
 
     ax.set_xlabel("Time [ps]")
@@ -3183,12 +3187,12 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
-    center_freq_Hz = timeFreq.center_frequency_Hz
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    time_freq = ssfm_result_list[0].input_signal.time_freq
+    center_freq_Hz = time_freq.center_frequency_Hz
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
 
     zvals = unpack_Zvals(ssfm_result_list)
@@ -3203,7 +3207,7 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
     Pmax = np.max([Pmax_initial, Pmax_final])
 
     # Minus must be included here due to -i*omega*t sign convention
-    f = (-timeFreq.f[Nmin:Nmax] + center_freq_Hz) / 1e12
+    f = (-time_freq.f_Hz[Nmin:Nmax] + center_freq_Hz) / 1e12
 
     scalingFactor, prefix = get_units(np.max(zvals))
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -3256,16 +3260,16 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
     zvals = unpack_Zvals(ssfm_result_list)
     matrix = unpack_matrix(ssfm_result_list, zvals, "spectrum")
 
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
-    center_freq_Hz = timeFreq.center_frequency_Hz
+    center_freq_Hz = time_freq.center_frequency_Hz
 
     # Plot pulse evolution throughout fiber in normalized log scale
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -3273,7 +3277,7 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     fig.patch.set_facecolor('white')
     ax.set_title("Spectrum Evolution (dB scale)")
     # Minus must be included here due to -i*omega*t sign convention
-    f = (-timeFreq.f[Nmin:Nmax] + center_freq_Hz) / 1e12
+    f = (-time_freq.f_Hz[Nmin:Nmax] + center_freq_Hz) / 1e12
     z = zvals
     F, Z = np.meshgrid(f, z)
     Pf = get_power(matrix[:, Nmin:Nmax]) / \
@@ -3314,16 +3318,16 @@ def plot_spectrum_matrix_3D(ssfm_result_list: list[SSFMResult],
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
     zvals = unpack_Zvals(ssfm_result_list)
     matrix = unpack_matrix(ssfm_result_list, zvals, "spectrum")
 
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
-    center_freq_Hz = timeFreq.center_frequency_Hz
+    center_freq_Hz = time_freq.center_frequency_Hz
 
     # Plot pulse evolution in 3D
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -3333,7 +3337,7 @@ def plot_spectrum_matrix_3D(ssfm_result_list: list[SSFMResult],
     plt.title("Spectrum Evolution (dB scale)")
 
     # Minus must be included here due to -i*omega*t sign convention
-    f = (-timeFreq.f[Nmin:Nmax] + center_freq_Hz) / 1e12
+    f = (-time_freq.f_Hz[Nmin:Nmax] + center_freq_Hz) / 1e12
     z = zvals
     F_surf, Z_surf = np.meshgrid(f, z)
     P_surf = get_power(matrix[:, Nmin:Nmax]) / \
@@ -3432,22 +3436,22 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
 
     print(f"The .gif animation will be saved in {os.getcwd()}")
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
     zvals = unpack_Zvals(ssfm_result_list)
     matrix = unpack_matrix(ssfm_result_list, zvals, "pulse")
     scalingFactor, letter = get_units(np.max(zvals))
 
-    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmin = np.max([int(time_freq.number_of_points / 2 - nrange), 0])
     Nmax = np.min(
-        [int(timeFreq.number_of_points / 2 + nrange),
-         timeFreq.number_of_points - 1]
+        [int(time_freq.number_of_points / 2 + nrange),
+         time_freq.number_of_points - 1]
     )
 
-    Tmin = timeFreq.t[Nmin]
-    Tmax = timeFreq.t[Nmax]
+    t_min_s = time_freq.t_s[Nmin]
+    t_max_s = time_freq.t_s[Nmax]
 
     points = np.array(
-        [timeFreq.t * 1e12, get_power(matrix[len(zvals) - 1, Nmin:Nmax])],
+        [time_freq.t_s * 1e12, get_power(matrix[len(zvals) - 1, Nmin:Nmax])],
         dtype=object
     ).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[0:-1], points[1:]], axis=1)
@@ -3462,7 +3466,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
     # Initialize line collection to be plotted
     lc = LineCollection(segments, cmap=cmap1, norm=norm)
     lc.set_array(
-        get_chirp(timeFreq.t[Nmin:Nmax],
+        get_chirp(time_freq.t_s[Nmin:Nmax],
                   matrix[len(zvals) - 1, Nmin:Nmax]) / 1e9
     )
 
@@ -3478,7 +3482,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
 
     def init():
 
-        ax.set_xlim([Tmin * 1e12, Tmax * 1e12])
+        ax.set_xlim([t_min_s * 1e12, t_max_s * 1e12])
         ax.set_ylim([0, 1.05 * Pmax])
 
         ax.set_xlabel("Time [ps]")
@@ -3494,7 +3498,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
 
         # Make collection of points from pulse power
         points = np.array(
-            [timeFreq.t[Nmin:Nmax] * 1e12, get_power(matrix[i, Nmin:Nmax])],
+            [time_freq.t_s[Nmin:Nmax] * 1e12, get_power(matrix[i, Nmin:Nmax])],
             dtype=object
         ).T.reshape(-1, 1, 2)
 
@@ -3505,7 +3509,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
         # Activate norm function based on local chirp
 
         lc.set_array(
-            get_chirp(timeFreq.t[Nmin:Nmax], matrix[i, Nmin:Nmax]) / 1e9)
+            get_chirp(time_freq.t_s[Nmin:Nmax], matrix[i, Nmin:Nmax]) / 1e9)
         # Plot line
         line = ax.add_collection(lc)
 
@@ -3626,9 +3630,8 @@ def plot_photon_number(ssfm_result_list: list[SSFMResult]):
     None.
 
     """
-
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
-    center_freq_Hz = timeFreq.center_frequency_Hz
+    time_freq = ssfm_result_list[0].input_signal.time_freq
+    center_freq_Hz = time_freq.center_frequency_Hz
     zvals = unpack_Zvals(ssfm_result_list)
 
     spectrum_matrix = unpack_matrix(
@@ -3636,21 +3639,10 @@ def plot_photon_number(ssfm_result_list: list[SSFMResult]):
 
     photon_number_array = np.zeros(len(zvals)) * 1.0
 
-    f = -timeFreq.f+center_freq_Hz  # Minus must be included here due to -i*omega*t sign convention
-
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(timeFreq.f)
-    ax.plot(-timeFreq.f)
-    plt.show()
-
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(f)
-    plt.show()
+    f = -time_freq.f_Hz+center_freq_Hz  # Minus must be included here due to -i*omega*t sign convention
 
 
-    for i, spectrum in enumerate(spectrum_matrix):
-
-        photon_number_array[i] = get_photon_number(f, spectrum)
+    photon_number_array = get_photon_number(f, spectrum_matrix)
 
 
     scalingFactor_Z, prefix_Z = get_units(np.max(zvals))
@@ -3697,8 +3689,8 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
 
     """
 
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
-    center_freq_Hz = timeFreq.center_frequency_Hz
+    time_freq = ssfm_result_list[0].input_signal.time_freq
+    center_freq_Hz = time_freq.center_frequency_Hz
     zvals = unpack_Zvals(ssfm_result_list)
 
     pulse_matrix = unpack_matrix(ssfm_result_list, zvals, "pulse")
@@ -3709,15 +3701,15 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     meanFreqArray = np.copy(meanTimeArray)
     stdTimeArray = np.copy(meanTimeArray)
     stdFreqArray = np.copy(meanTimeArray)
-    f = -timeFreq.f  # Minus must be included here due to -i*omega*t sign convention
+    f = -time_freq.f_Hz  # Minus must be included here due to -i*omega*t sign convention
 
     i = 0
     for pulse, spectrum in zip(pulse_matrix, spectrum_matrix):
 
-        meanTimeArray[i] = get_average(timeFreq.t, pulse)
+        meanTimeArray[i] = get_average(time_freq.t_s, pulse)
         meanFreqArray[i] = get_average(f, spectrum)
 
-        stdTimeArray[i] = get_stdev(timeFreq.t, pulse)
+        stdTimeArray[i] = get_stdev(time_freq.t_s, pulse)
         stdFreqArray[i] = get_stdev(f, spectrum)
 
         i += 1
@@ -3752,8 +3744,8 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     ax.set_ylabel(f"Time [{prefix_pulse}s]", color="C0")
     ax.tick_params(axis="y", labelcolor="C0")
     ax.set_ylim(
-        timeFreq.tmin / scalingFactor_pulse,
-        timeFreq.tmax / scalingFactor_pulse
+        time_freq.t_min_s / scalingFactor_pulse,
+        time_freq.t_max_s / scalingFactor_pulse
     )
 
     ax2 = ax.twinx()
@@ -3773,8 +3765,8 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     )
 
     ax2.set_ylim(
-        timeFreq.fmin / scalingFactor_spectrum,
-        timeFreq.fmax / scalingFactor_spectrum
+        time_freq.f_min_Hz / scalingFactor_spectrum,
+        time_freq.f_max_Hz / scalingFactor_spectrum
     )
     ax2.set_ylabel(f"Freq. [{prefix_spectrum}Hz]", color="C1")
     ax2.tick_params(axis="y", labelcolor="C1")
@@ -3838,6 +3830,7 @@ def plot_everything_about_result(
     """
     plot_avg_and_std_of_time_and_freq(ssfm_result_list)
     plot_photon_number(ssfm_result_list)
+
     plot_everything_about_pulses(
         ssfm_result_list, nrange_pulse, dB_cutoff_pulse, **kwargs)
 
@@ -3858,25 +3851,25 @@ def waveletTest(M, s):
 
 
 def waveletTransform(
-    timeFreq: TimeFreq, pulse, nrange_pulse, nrange_spectrum, dB_cutoff
+    time_freq: TimeFreq, pulse, nrange_pulse, nrange_spectrum, dB_cutoff
 ):
 
-    Nmin_pulse = np.max([int(timeFreq.number_of_points / 2 - nrange_pulse), 0])
+    Nmin_pulse = np.max([int(time_freq.number_of_points / 2 - nrange_pulse), 0])
     Nmax_pulse = np.min(
         [
-            int(timeFreq.number_of_points / 2 + nrange_pulse),
-            timeFreq.number_of_points - 1,
+            int(time_freq.number_of_points / 2 + nrange_pulse),
+            time_freq.number_of_points - 1,
         ]
     )
 
-    Tmax = timeFreq.t[Nmax_pulse]
+    t_max_s = time_freq.t_s[Nmax_pulse]
 
-    t = timeFreq.t[Nmin_pulse:Nmax_pulse]
+    t = time_freq.t_s[Nmin_pulse:Nmax_pulse]
 
-    wavelet_durations = np.linspace((t[1] - t[0]) * 10, Tmax, 1000)
+    wavelet_durations = np.linspace((t[1] - t[0]) * 10, t_max_s, 1000)
 
-    print((t[1] - t[0]) * 100, Tmax)
-    print(1 / Tmax / 1e9, 1 / ((t[1] - t[0]) * 100) / 1e9)
+    print((t[1] - t[0]) * 100, t_max_s)
+    print(1 / t_max_s / 1e9, 1 / ((t[1] - t[0]) * 100) / 1e9)
 
     dt_wavelet = wavelet_durations[1] - wavelet_durations[0]
 
@@ -4199,7 +4192,7 @@ def get_value_at_freq(freqList: npt.NDArray[float],
 
 def get_current_SNR_dB(freqs: npt.NDArray[float],
                        spectrum: npt.NDArray[complex],
-                       channel: ChannelClass,
+                       channel: Channel,
                        freqTol: float = 0.05) -> float:
     """
     Get SNR of channel in spectrum
@@ -4215,7 +4208,7 @@ def get_current_SNR_dB(freqs: npt.NDArray[float],
         Absolute frequencies of the spectrum.
     spectrum : npt.NDArray[complex]
         Spectrum field of signal whose SNR we want.
-    channel : ChannelClass
+    channel : Channel
         Specific channel whose SNR value we want.
     freqTol : float, optional
         When computing the noise inside the signal BW, use the PSD evaluated at
@@ -4235,15 +4228,15 @@ def get_current_SNR_dB(freqs: npt.NDArray[float],
                          "be smaller than 1!")
 
     signal = extract_spectrum_range(
-        freqs, spectrum, channel.signalMinFreq_Hz, channel.signalMaxFreq_Hz
+        freqs, spectrum, channel.signal_min_freq_Hz, channel.signal_max_freq_Hz
     )
     signalEnergy = get_energy(freqs, signal)
 
     noiseBelow = extract_spectrum_range(
-        freqs, spectrum, channel.channel_min_freq_Hz, channel.signalMinFreq_Hz
+        freqs, spectrum, channel.channel_min_freq_Hz, channel.signal_min_freq_Hz
     )
     noiseAbove = extract_spectrum_range(
-        freqs, spectrum, channel.signalMaxFreq_Hz, channel.channel_max_freq_Hz
+        freqs, spectrum, channel.signal_max_freq_Hz, channel.channel_max_freq_Hz
     )
 
     noiseEnergyBelow = get_energy(freqs, noiseBelow)
@@ -4254,7 +4247,7 @@ def get_current_SNR_dB(freqs: npt.NDArray[float],
             get_value_at_freq(
                 freqs,
                 channel.channel_min_freq_Hz +
-                channel.leftGap_Hz * (1 - freqTol),
+                channel.left_gap_Hz * (1 - freqTol),
                 noiseBelow,
             )
         )
@@ -4265,7 +4258,7 @@ def get_current_SNR_dB(freqs: npt.NDArray[float],
             get_value_at_freq(
                 freqs,
                 channel.channel_max_freq_Hz -
-                channel.rightGap_Hz * (1 - freqTol),
+                channel.right_gap_Hz * (1 - freqTol),
                 noiseAbove,
             )
         )
@@ -4287,7 +4280,7 @@ def get_current_SNR_dB(freqs: npt.NDArray[float],
 
 
 def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
-                       channel: ChannelClass,
+                       channel: Channel,
                        freqTol: float = 0.05
                        ) -> [npt.NDArray[float], npt.NDArray[float]]:
     """
@@ -4297,8 +4290,8 @@ def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
     ----------
     ssfm_result_list : list[SSFMResult]
         List of SSFMResult objects containing signal info for each fiber.
-    channel_list : list[ChannelClass]
-        List of ChannelClass objects describing the min, center and max
+    channel_list : list[Channel]
+        List of Channel objects describing the min, center and max
         freqs of each channel.
     freqTol : float
         When computing the noise inside the signal BW, use the PSD evaluated at
@@ -4315,12 +4308,12 @@ def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
     """
 
     zvals = unpack_Zvals(ssfm_result_list)
-    timeFreq = ssfm_result_list[0].input_signal.time_freq
+    time_freq = ssfm_result_list[0].input_signal.time_freq
     spectrum_matrix = unpack_matrix(
         ssfm_result_list,
         zvals,
         "spectrum")
-    freqs = timeFreq.f + timeFreq.center_frequency_Hz
+    freqs = time_freq.f_Hz + time_freq.center_frequency_Hz
 
     outputArray = np.zeros_like(zvals) * 1.0
 
@@ -4331,7 +4324,7 @@ def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
 
 
 def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
-                     channel_list: list[ChannelClass],
+                     channel_list: list[Channel],
                      freqTol: float = 0.05) -> npt.NDArray[float]:
     """
     Calculates SNR for all channels at output of fiber span
@@ -4340,8 +4333,8 @@ def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
     ----------
     ssfm_result_list : list[SSFMResult]
         List of SSFMResult objects containing signal info for each fiber.
-    channel_list : list[ChannelClass]
-        List of ChannelClass objects describing the min, center and max freqs
+    channel_list : list[Channel]
+        List of Channel objects describing the min, center and max freqs
         of each channel.
     freqTol : float
         When computing the noise inside the signal BW, use the PSD evaluated at
@@ -4356,7 +4349,7 @@ def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
     """
 
     freqs = (
-        ssfm_result_list[0].input_signal.time_freq.f
+        ssfm_result_list[0].input_signal.time_freq.f_Hz
         + ssfm_result_list[0].input_signal.time_freq.center_frequency_Hz
     )
     finalSpectrum = ssfm_result_list[-1].spectrum_field_matrix[-1, :]
@@ -4379,8 +4372,8 @@ def plot_final_SNR_dB(ssfm_result_list: list[SSFMResult],
     ----------
     ssfm_result_list : list[SSFMResult]
         List of SSFMResult objects containing signal info for each fiber.
-    channel_list : list[ChannelClass]
-        List of ChannelClass objects describing the min, center and max
+    channel_list : list[Channel]
+        List of Channel objects describing the min, center and max
         freqs of each channel.
     freqTol : float
         When computing the noise inside the signal BW, use the PSD evaluated at
@@ -4419,7 +4412,7 @@ def plot_final_SNR_dB(ssfm_result_list: list[SSFMResult],
 
 def plot_SNR_for_channels(
     ssfm_result_list: list[SSFMResult],
-    channel_list: list[ChannelClass],
+    channel_list: list[Channel],
     channelNumber_list: list[int],
     **kwargs
 ):
@@ -4430,8 +4423,8 @@ def plot_SNR_for_channels(
     ----------
     ssfm_result_list : list[SSFMResult]
         List of SSFMResult objects containing signal info for each fiber.
-    channel_list : list[ChannelClass]
-        List of ChannelClass objects describing the min, center and max
+    channel_list : list[Channel]
+        List of Channel objects describing the min, center and max
         freqs of each channel.
     channelNumber_list : list[int]
         List of channel numbers to be plotted.
@@ -4497,6 +4490,8 @@ def plot_SNR_for_channels(
 
 if __name__ == "__main__":
 
+    np.random.seed(123)
+
 
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
@@ -4514,7 +4509,7 @@ if __name__ == "__main__":
     test_duration_s = 12e-12
 
     alpha_test = 0#-0.22/1e3  # dB/m
-    beta_list = [-10.66e-26]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    beta_list = [-10.66e-26,10.66e-36,-10.66e-46]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
     gamma_test = 1e-2  # 1/W/m
     length_test = 12e3  # m
     number_of_steps = 2**9
@@ -4527,13 +4522,7 @@ if __name__ == "__main__":
         alpha_test,
         use_self_steepening=False)
 
-    fiber_test2 = FiberSpan(
-        length_test,
-        number_of_steps,
-        gamma_test,
-        beta_list,
-        alpha_test,
-        use_self_steepening=False)
+
 
 
     fiber_list = [fiber_test]  # ,fiber_test_2
@@ -4556,7 +4545,6 @@ if __name__ == "__main__":
     )
     nrange = 500
     dB_cutoff = -60
-
 
 
     plot_everything_about_result(
