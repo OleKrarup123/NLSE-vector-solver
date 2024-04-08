@@ -138,7 +138,7 @@ def self_steepening_pulse(time_freq: TimeFreq,
     w0 = time_freq.center_frequency_Hz*2*np.pi
     s=1/w0/duration_s
 
-    tau = time_freq.t_s/duration_s
+    tau = time_freq.t_s()/duration_s
     P_max = amplitude_sqrt_W**2
     L_NL = 1/gamma_per_W_m/P_max
 
@@ -266,7 +266,7 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
 
     time_freq_loaded = load_TimeFreq(ssfm_result_list[0].dirs[1])
 
-    assert len(time_freq_loaded.t_s)==N, f"""ERROR: {len(time_freq_loaded.t) = }
+    assert len(time_freq_loaded.t_s())==N, f"""ERROR: {len(time_freq_loaded.t) = }
     but {N = }!!!"""
     assert time_freq_loaded.time_step_s==dt, f"""ERROR: {time_freq_loaded.time_step_s = }
     but {dt = }!!!"""
@@ -626,7 +626,7 @@ def unit_test_beta2(show_plot_flag=False):
         FFT_tol=test_FFT_tol
     )
     final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
-    theoretical_final_pulse = gaussian_pulse_with_beta_2_only(time_freq_test.t_s,
+    theoretical_final_pulse = gaussian_pulse_with_beta_2_only(time_freq_test.t_s(),
                                     test_duration_s,
                                     test_amplitude, beta_list[0],
                                     length_test)
@@ -723,7 +723,7 @@ def unit_test_beta3(show_plot_flag=False):
                                     FFT_tol=test_FFT_tol,
                                     describe_input_signal_flag=False)
 
-    theoretical_final_pulse = gaussian_pulse_with_beta_3_only(time_freq_test.t_s,
+    theoretical_final_pulse = gaussian_pulse_with_beta_3_only(time_freq_test.t_s(),
                                     test_duration_s,
                                     test_amplitude, beta_list[1],
                                     length_test)
@@ -1088,7 +1088,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
                                     FFT_tol=test_FFT_tol,
                                     describe_input_signal_flag=False)
 
-    f = -time_freq_test.f_Hz+center_freq_test
+    f = -time_freq_test.f_Hz()+center_freq_test
 
     initial_photon_number = get_photon_number(f,
                                         test_input_signal.spectrum_field.reshape(1,-1))[-1]
