@@ -49,6 +49,12 @@ FREQ_CENTER_C_BAND_HZ = (FREQ_MIN_C_BAND_HZ + FREQ_MAX_C_BAND_HZ) / 2
 FREQ_1550_NM_Hz = 193414489032258.06
 FREQ_1310_NM_HZ = 228849204580152.7
 
+BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M = 23e-27
+BETA2_AT_1625_NM_TYPICAL_SMF_S2_PER_M = 28.1e-27
+
+ALPHA_AT_1310_NM_TYPICAL_SMF_DB_PER_M = -0.3/1e3
+ALPHA_AT_1550_NM_TYPICAL_SMF_DB_PER_M = -0.22/1e3
+
 PULSE_TYPE_LIST = ["random",
                    "gaussian",
                    "general_gaussian",
@@ -60,10 +66,6 @@ PULSE_TYPE_LIST = ["random",
                    "raised_cosine",
                    "CW",
                    "custom"]
-
-
-
-
 
 
 
@@ -339,17 +341,13 @@ class TimeFreq:
 
         """
 
-        # t_s = np.linspace(0,
-        #                   self.number_of_points * self.time_step_s,
-        #                   self.number_of_points)
-        # self.t_s() = t_s - np.mean(t_s)
+
         self.t_min_s = self.t_s()[0]
         self.t_max_s = self.t_s()[-1]
-        #self.t_max_s = self.t_s()[-1]
 
-        #self.f_Hz() = get_freq_range_from_time(self.t_s()(self))
         self.f_min_Hz = self.f_Hz()[0]
         self.f_max_Hz = self.f_Hz()[-1]
+
         self.freq_step_Hz = self.f_Hz()[1] - self.f_Hz()[0]
 
         assert np.min(self.center_frequency_Hz +
@@ -371,6 +369,46 @@ class TimeFreq:
         return get_freq_range_from_time(self.t_s())
 
 
+    def f_rel_Hz(self):
+        """
+        Generates array of frequencies centered at zero. Crucually,
+        "more negative" frequencies in this array correspond to "greater"
+        frequencies. For example, if f_rel_Hz ranges from -10GHz to +10GHz,
+        and the carrier freq of interest is 200THz, the entry with a value of
+        -10GHz will correspond to the spectral component at 200.01THz. This
+        rather awkward behavior is a result of the sign convention.
+
+        Returns
+        -------
+        f_rel_Hz : npt.NDArray[float].
+
+        """
+        return get_freq_range_from_time(self.t_s())
+
+
+    def f_rel_flipped_Hz(self):
+        """
+        Generates array of frequencies centered at zero, where positive
+        entries correspond to higher frequencies.
+
+        Returns
+        -------
+        f_rel_flipped_Hz : npt.NDArray[float].
+
+        """
+        return -1.0*get_freq_range_from_time(self.t_s())
+
+    def f_abs_Hz(self):
+        """
+        Generates array of frequencies centered at the carrier frequency.
+
+
+        Returns
+        -------
+        f_rel_Hz : npt.NDArray[float].
+
+        """
+        return -self.f_rel_Hz()+self.center_frequency_Hz
 
     def describe_config(self,
                         destination=None):
@@ -946,7 +984,7 @@ def get_pulse(
 
     normalized_time = delta_t_s/duration_s
     phase_factor = np.exp(1j*phase_rad)
-    carrier_freq = np.exp(-1j * 2 * pi * (-freq_offset_Hz) * delta_t_s)
+    carrier_freq = np.exp(-1j * 2 * pi * (freq_offset_Hz) * delta_t_s)
     chirp_factor = np.exp(
         -(1j * chirp) / 2 * normalized_time ** 2
     )
@@ -1164,7 +1202,6 @@ class FiberSpan:
     beta_list: list[float]
     alpha_dB_per_m: float
     #post init
-    #z_m: npt.NDArray[float] = field(init=False)
     dz_m: float = field(init=False)
     alpha_Np_per_m: float = field(init=False)
     raman_in_freq_domain_func: Callable[npt.NDArray[float],npt.NDArray[complex]] = field(init=False)
@@ -1515,10 +1552,10 @@ def load_fiber_link(path: str) -> FiberLink:
         fiber_list.append(current_fiber)
     return FiberLink(fiber_list)
 
-#TODO: Finish turning InputSignal into a dataclass
+#TODO: Redo docstring
 @dataclass
 class InputSignal:
-    # TODO: Redo docstring
+
 
     #Init
     time_freq: TimeFreq
@@ -1557,42 +1594,6 @@ class InputSignal:
             self.phase_rad
         )
         self.spectrum_field = 1j * np.zeros_like(self.pulse_field)
-
-        # TODO: Redo docstring
-        """
-        Constructor for InputSignal
-
-        Parameters:
-            time_freq (TimeFreq): Contains info about discretized
-                                 time and freq axes
-            duration_s (float): Temporal duration of signal [s]
-            amplitude_sqrt_W (float): Amplitude of temporal signal in [sqrt(W)]
-            pulse_type (str): Selects pre-defined pulse type.
-                              Select "custom" to define the signal manually.
-
-            chirp (float): Chirping factor of sigal
-
-            time_offset_s (float): Delay of signal relative to t=0 in [s]
-
-            order (float): For n==1 a and pulseType = "Gaussian" a regular
-                           Gaussian pulse is returned. For n>=1 return
-                           a super-Gaussian
-            noiseAmplitude (float): Amplitude of added white
-                                    noise in units of [sqrt(W)].
-
-            FFT_tol=1e-7 (float) (optional): Maximum fractional change in
-                                             signal energy when doing FFT
-            describe_input_signal_flag =True (bool) (optional): Flag to
-                determine if fiber characteristics should be printed
-
-        """
-
-
-
-
-
-
-
 
 
         if get_energy(self.time_freq.t_s(), self.pulse_field) == 0.0:
@@ -2982,7 +2983,6 @@ def plot_pulse_matrix_2D(ssfm_result_list: list[SSFMResult],
     )
 
     zvals = unpack_Zvals(ssfm_result_list)
-    print(f"length of zvals = {len(zvals)}")
     matrix = unpack_matrix(ssfm_result_list, zvals, "pulse")
 
     # Plot pulse evolution throughout fiber in normalized log scale
@@ -3226,7 +3226,7 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
     Pmax = np.max([Pmax_initial, Pmax_final])
 
     # Minus must be included here due to -i*omega*t sign convention
-    f = (-time_freq.f_Hz()[Nmin:Nmax] + center_freq_Hz) / 1e12
+    f = time_freq.f_abs_Hz()[Nmin:Nmax] / 1e12
 
     scalingFactor, prefix = get_units(np.max(zvals))
     os.chdir(ssfm_result_list[0].dirs[1])
@@ -3296,7 +3296,7 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     fig.patch.set_facecolor('white')
     ax.set_title("Spectrum Evolution (dB scale)")
     # Minus must be included here due to -i*omega*t sign convention
-    f = (-time_freq.f_Hz()[Nmin:Nmax] + center_freq_Hz) / 1e12
+    f = time_freq.f_abs_Hz()[Nmin:Nmax] / 1e12
     z = zvals
     F, Z = np.meshgrid(f, z)
     Pf = get_power(matrix[:, Nmin:Nmax]) / \
@@ -3356,7 +3356,7 @@ def plot_spectrum_matrix_3D(ssfm_result_list: list[SSFMResult],
     plt.title("Spectrum Evolution (dB scale)")
 
     # Minus must be included here due to -i*omega*t sign convention
-    f = (-time_freq.f_Hz()[Nmin:Nmax] + center_freq_Hz) / 1e12
+    f = time_freq.f_abs_Hz()[Nmin:Nmax] / 1e12
     z = zvals
     F_surf, Z_surf = np.meshgrid(f, z)
     P_surf = get_power(matrix[:, Nmin:Nmax]) / \
@@ -3681,7 +3681,6 @@ def plot_photon_number(ssfm_result_list: list[SSFMResult]):
     ax.set_xlabel(f"Distance [{prefix_Z}m]")
     ax.set_ylabel(f"Change in Photon number [%]", color="C0")
 
-    print(np.max(photon_number_array))
 
 
     save_plot("photon_number_evo")
@@ -3720,7 +3719,7 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     meanFreqArray = np.copy(meanTimeArray)
     stdTimeArray = np.copy(meanTimeArray)
     stdFreqArray = np.copy(meanTimeArray)
-    f = -time_freq.f_Hz()  # Minus must be included here due to -i*omega*t sign convention
+    f = time_freq.f_abs_Hz()  # Minus must be included here due to -i*omega*t sign convention
 
     i = 0
     for pulse, spectrum in zip(pulse_matrix, spectrum_matrix):
@@ -3748,7 +3747,7 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     fig.patch.set_facecolor('white')
     plt.title("Evolution of temporal/spectral widths and centers")
     ax.plot(zvals / scalingFactor_Z, meanTimeArray /
-            scalingFactor_pulse, label="Pulse")
+            scalingFactor_pulse, label="Pulse Center")
 
     ax.fill_between(
         zvals / scalingFactor_Z,
@@ -3772,7 +3771,7 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
         zvals / scalingFactor_Z,
         meanFreqArray / scalingFactor_spectrum,
         "C1-",
-        label=f"Spectrum Center rel. to $f_c$={center_freq_Hz/1e12:.5}THz ",
+        label=f"Spectrum Center",
     )
     ax2.fill_between(
         zvals / scalingFactor_Z,
@@ -3784,8 +3783,8 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     )
 
     ax2.set_ylim(
-        time_freq.f_min_Hz / scalingFactor_spectrum,
-        time_freq.f_max_Hz / scalingFactor_spectrum
+        (time_freq.f_min_Hz+center_freq_Hz) / scalingFactor_spectrum,
+        (time_freq.f_max_Hz+center_freq_Hz) / scalingFactor_spectrum
     )
     ax2.set_ylabel(f"Freq. [{prefix_spectrum}Hz]", color="C1")
     ax2.tick_params(axis="y", labelcolor="C1")
@@ -3805,7 +3804,6 @@ def plot_avg_and_std_of_time_and_freq(ssfm_result_list: list[SSFMResult]):
     save_plot("Width_evo")
     plt.show()
     os.chdir(ssfm_result_list[0].dirs[0])
-
 
 # TODO: Make figure dpi a variable argument
 def plot_everything_about_result(
@@ -4518,12 +4516,23 @@ if __name__ == "__main__":
     dt = 100e-15  # Time resolution [s]
 
     center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
-    time_freq_test = TimeFreq(number_of_points=N, time_step_s=dt, center_frequency_Hz=center_freq_test)
-    time_freq_test2 = TimeFreq(number_of_points=N, time_step_s=dt, center_frequency_Hz=center_freq_test)
+    time_freq_test = TimeFreq(number_of_points=N,
+                              time_step_s=dt,
+                              center_frequency_Hz=center_freq_test)
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(time_freq_test.f_rel_Hz(),'.')
+    plt.show()
 
     fig,ax=plt.subplots(dpi=300)
-    ax.plot(time_freq_test.f_Hz(),'.')
+    ax.plot(time_freq_test.f_abs_Hz(),'.')
     plt.show()
+
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(time_freq_test.f_rel_flipped_Hz(),'.')
+    plt.show()
+
+
+
 
 
     # Set up signal
@@ -4532,7 +4541,7 @@ if __name__ == "__main__":
     test_pulse_type = "gaussian"
     test_amplitude = 0.25
     test_duration_s = 12e-12
-    test_freq_offset_Hz = 500e9
+    test_freq_offset_Hz = 100e9
 
 
     test_input_signal = InputSignal(time_freq_test,
@@ -4543,12 +4552,24 @@ if __name__ == "__main__":
                                     FFT_tol=test_FFT_tol)
 
 
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(time_freq_test.f_rel_flipped_Hz(),'.')
+    ax2=ax.twinx()
+    ax2.plot(get_power(test_input_signal.spectrum_field),'.',color='C1')
+    plt.show()
+
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(time_freq_test.f_rel_flipped_Hz(),get_power(test_input_signal.spectrum_field),'.')
+    plt.show()
+
+
+
 
 
     alpha_test = 0#-0.22/1e3  # dB/m
     beta_list = [-10.66e-26,10.66e-36,-10.66e-46]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    gamma_test = 1e-2  # 1/W/m
-    length_test = 12e3  # m
+    gamma_test = 1e-1  # 1/W/m
+    length_test = 1e3  # m
     number_of_steps = 2**9
 
     fiber_test = FiberSpan(
@@ -4559,13 +4580,7 @@ if __name__ == "__main__":
         alpha_test,
         use_self_steepening=False)
 
-    fiber_test2 = FiberSpan(
-        length_test,
-        number_of_steps,
-        gamma_test,
-        beta_list,
-        alpha_test,
-        use_self_steepening=False)
+
 
 
 

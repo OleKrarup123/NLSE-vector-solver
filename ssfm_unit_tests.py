@@ -9,20 +9,19 @@ from ssfm_functions import *
 from scipy.special import airy
 from scipy.optimize import fsolve
 
-
 def compare_fiber_links(fiber_link_1: FiberLink,fiber_link_2: FiberLink):
 
     for fiber_idx, (fiber_1, fiber_2) in enumerate(zip(fiber_link_1.fiber_list,
                                                      fiber_link_2.fiber_list)):
-        assert compare_fibers(fiber_1, fiber_2), f"""Fibers at
-        index {fiber_idx} do not match!!!"""
+
+
+        assert compare_fibers(fiber_1, fiber_2), f"""Fibers at index {fiber_idx} do not match!!!"""
 
     return True
 
 def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
     assert np.isclose(fiber_1.length_m, fiber_2.length_m,rtol=1e-6,atol=1e-100)
     assert fiber_1.number_of_steps == fiber_2.number_of_steps
-
 
     assert np.isclose(fiber_1.gamma_per_W_per_m, fiber_2.gamma_per_W_per_m,rtol=1e-6,atol=1e-100)
 
