@@ -49,8 +49,8 @@ FREQ_CENTER_C_BAND_HZ = (FREQ_MIN_C_BAND_HZ + FREQ_MAX_C_BAND_HZ) / 2
 FREQ_1550_NM_Hz = 193414489032258.06
 FREQ_1310_NM_HZ = 228849204580152.7
 
-BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M = 23e-27
-BETA2_AT_1625_NM_TYPICAL_SMF_S2_PER_M = 28.1e-27
+BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M = -23e-27
+BETA2_AT_1625_NM_TYPICAL_SMF_S2_PER_M = -28.1e-27
 
 ALPHA_AT_1310_NM_TYPICAL_SMF_DB_PER_M = -0.3/1e3
 ALPHA_AT_1550_NM_TYPICAL_SMF_DB_PER_M = -0.22/1e3
@@ -1687,13 +1687,13 @@ class InputSignal:
         fig, ax = plt.subplots(dpi=300)
         ax.set_title(f'Input signal for {self.pulse_type} in time domain')
         ax.plot(self.time_freq.t_s()/scalingFactor,
-                get_power(self.pulse_field), '.')
+                get_power(self.pulse_field), '-')
         ax.set_xlabel(f'Time [{prefix}s]')
         ax.set_ylabel('Power [W]')
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.set_xlim(-16*self.duration_s/scalingFactor,
-                    16*self.duration_s/scalingFactor)
+        ax.set_xlim(-1*self.duration_s/scalingFactor,
+                    1*self.duration_s/scalingFactor)
         plt.show()
 
 
@@ -4513,23 +4513,14 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
     N = 2 ** 14  # Number of points
-    dt = 100e-15  # Time resolution [s]
+    dt = 1e-12  # Time resolution [s]
 
     center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(number_of_points=N,
                               time_step_s=dt,
                               center_frequency_Hz=center_freq_test)
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(time_freq_test.f_rel_Hz(),'.')
-    plt.show()
 
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(time_freq_test.f_abs_Hz(),'.')
-    plt.show()
 
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(time_freq_test.f_rel_flipped_Hz(),'.')
-    plt.show()
 
 
 
@@ -4537,11 +4528,10 @@ if __name__ == "__main__":
 
     # Set up signal
     test_FFT_tol = 1e-3
-    test_amplitude = 10.0
-    test_pulse_type = "gaussian"
-    test_amplitude = 0.25
-    test_duration_s = 12e-12
-    test_freq_offset_Hz = 100e9
+    test_amplitude = 0.8
+    test_pulse_type = "custom"
+    test_duration_s = 1e-9
+    test_freq_offset_Hz = 10e9
 
 
     test_input_signal = InputSignal(time_freq_test,
@@ -4551,24 +4541,30 @@ if __name__ == "__main__":
                                     freq_offset_Hz=test_freq_offset_Hz,
                                     FFT_tol=test_FFT_tol)
 
+    test_input_signal.pulse_field+= get_pulse(time_freq_test.t_s(),
+                                              test_duration_s,
+                                              0,
+                                              test_amplitude,
+                                              pulse_type='cw',
+                                              freq_offset_Hz=test_freq_offset_Hz)
 
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(time_freq_test.f_rel_flipped_Hz(),'.')
-    ax2=ax.twinx()
-    ax2.plot(get_power(test_input_signal.spectrum_field),'.',color='C1')
-    plt.show()
+    test_input_signal.pulse_field+= get_pulse(time_freq_test.t_s(),
+                                          test_duration_s,
+                                          0,
+                                          test_amplitude,
+                                          pulse_type='cw',
+                                          freq_offset_Hz=-test_freq_offset_Hz)
 
-    fig,ax=plt.subplots(dpi=300)
-    ax.plot(time_freq_test.f_rel_flipped_Hz(),get_power(test_input_signal.spectrum_field),'.')
-    plt.show()
+    test_input_signal.update_spectrum()
+    test_input_signal.describe_input_signal()
 
 
 
 
 
     alpha_test = 0#-0.22/1e3  # dB/m
-    beta_list = [-10.66e-26,10.66e-36,-10.66e-46]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    gamma_test = 1e-1  # 1/W/m
+    beta_list = [0]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 1e-3  # 1/W/m
     length_test = 1e3  # m
     number_of_steps = 2**9
 
@@ -4580,14 +4576,15 @@ if __name__ == "__main__":
         alpha_test,
         use_self_steepening=False)
 
-
-
-
-
     fiber_list = [fiber_test]
     fiber_link = FiberLink(fiber_list)
-    exp_name = f"photon_number_test"
+
+
+
     # Run SSFM
+    exp_name = f"FWM_test"
+
+
     ssfm_result_list = SSFM(
         fiber_link,
         test_input_signal,
@@ -4595,7 +4592,9 @@ if __name__ == "__main__":
         experiment_name=exp_name,
         FFT_tol=test_FFT_tol
     )
-    nrange = 500
+
+
+    nrange = 2000
     dB_cutoff = -60
 
 
@@ -4606,5 +4605,3 @@ if __name__ == "__main__":
         nrange,
         dB_cutoff,
         show_3D_plot_flag=False)
-
-
