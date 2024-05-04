@@ -1087,7 +1087,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
                                     FFT_tol=test_FFT_tol,
                                     describe_input_signal_flag=False)
 
-    f = -time_freq_test.f_Hz()+center_freq_test
+    f = -time_freq_test.f_rel_Hz()+center_freq_test
 
     initial_photon_number = get_photon_number(f,
                                         test_input_signal.spectrum_field.reshape(1,-1))[-1]
@@ -1111,7 +1111,8 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
                       final_photon_number,
                       rtol=4e-8,
                       atol=1e-100), f"""ERROR: {initial_photon_number = } but
-    {final_photon_number = }. Should be conserved when gain/loss = 0.0 !"""
+    {final_photon_number = }. Should be conserved in a fiber with zero
+    gain or loss!"""
     print("Unit test for photon number conservation without Raman SUCCEEDED!")
     print("  ")
 

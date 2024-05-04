@@ -139,12 +139,7 @@ def get_chirp(time_s: npt.NDArray[float],
     """
 
     phi = get_phase(pulse)
-    # Change in phase. Prepend to ensure consistent array size
-    # dphi = np.diff(phi, prepend=phi[0] - (phi[1] - phi[0]), axis=0)
-    # Change in time.  Prepend to ensure consistent array size
-    # dt = np.diff(time_s, prepend=time_s[0] - (time_s[1] - time_s[0]), axis=0)
-    # chirp = -1.0 / (2 * pi) * dphi / dt
-    chirp = -1.0/2/pi*np.gradient(phi, time_s)
+    chirp = -1.0*np.gradient(phi, time_s)/2/pi
     return chirp
 
 @dataclass
@@ -282,23 +277,24 @@ class Channel:
 
 @dataclass
 class TimeFreq:
-    #TODO: Redo docstring
     """
     Class for storing info about the time axis and frequency axis.
 
     Attributes:
         number_of_points (int): Number of time points
-        time_step (float): Duration of each time step
-        t (npt.NDArray[float]): Array containing all the time points
+        time_step_s (float): Duration of each time step
+        center_frequency_Hz (float): Central optical frequency
+
         t_min_s (float): First entry in time array
         t_max_s (float): Last entry in time array
 
-        center_frequency_Hz (float): Central optical frequency
-        f (npt.NDArray[float]): Frequency range (relative to center_frequency_Hz)
-                     corresponding to t when FFT is taken
         f_min_Hz (float): Lowest (most negative) frequency component
         f_max_Hz (float): Highest (most positive) frequency component
         freq_step_Hz (float): Frequency resolution
+
+        describe_time_freq_flag (bool): Flag to toggle printing of info
+        when class is initialized.
+
     """
 
     #init
@@ -306,11 +302,9 @@ class TimeFreq:
     time_step_s: float
     center_frequency_Hz: float
     #post init
-    #t_s: npt.NDArray[float] = field(init=False)
     t_min_s: float = field(init=False)
     t_max_s: float = field(init=False)
 
-    #f_Hz: npt.NDArray[float] = field(init=False)
     f_min_Hz: float = field(init=False)
     f_max_Hz: float = field(init=False)
 
@@ -345,14 +339,14 @@ class TimeFreq:
         self.t_min_s = self.t_s()[0]
         self.t_max_s = self.t_s()[-1]
 
-        self.f_min_Hz = self.f_Hz()[0]
-        self.f_max_Hz = self.f_Hz()[-1]
+        self.f_min_Hz = self.f_rel_Hz()[0]
+        self.f_max_Hz = self.f_rel_Hz()[-1]
 
-        self.freq_step_Hz = self.f_Hz()[1] - self.f_Hz()[0]
+        self.freq_step_Hz = self.f_rel_Hz()[1] - self.f_rel_Hz()[0]
 
         assert np.min(self.center_frequency_Hz +
-                      self.f_Hz()) >= 0, f"""ERROR! Lowest frequency of
-        {np.min(self.center_frequency_Hz+self.f_Hz())/1e9:.3f}GHz is below 0.
+                      self.f_rel_Hz()) >= 0, f"""ERROR! Lowest frequency of
+        {np.min(self.center_frequency_Hz+self.f_rel_Hz())/1e9:.3f}GHz is below 0.
         Consider increasing the center frequency!"""
 
         if self.describe_time_freq_flag:
@@ -360,13 +354,21 @@ class TimeFreq:
 
 
     def t_s(self):
+        """
+        Function returns the array of times in [s] at which the pulse field is
+        evaluated.
+
+        Returns
+        -------
+        TYPE
+            t_s : npt.NDArray[float].
+
+        """
         time_array = np.linspace(0,
                           self.number_of_points * self.time_step_s,
                           self.number_of_points)
         return time_array - np.mean(time_array)
 
-    def f_Hz(self):
-        return get_freq_range_from_time(self.t_s())
 
 
     def f_rel_Hz(self):
@@ -533,7 +535,15 @@ def get_power(field_in_time_or_freq_domain: npt.NDArray[complex]
 def get_photon_number(freq_Hz: npt.NDArray[float],
                       field_in_freq_domain: npt.NDArray[float])-> float:
     """
+    Computes number of photons in the signal.
 
+    For a fiber with no attenuation, but dispersion and nonlinearity (
+        even including self-steepening and Raman) the total number of
+    photons should be conserved from z=0 to z=L.
+
+    Note that the actual number yielded by this computation is not meaningful,
+    since it applies hbar to a "classical" model of light, but changes in the
+    number as a function of z (in the absence of loss) should still be zero.
 
     Parameters
     ----------
@@ -618,7 +628,8 @@ def general_gaussian_pulse(normalized_time: npt.NDArray[float], order: float
     return pulse
 
 
-def gaussian_pulse(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
+def gaussian_pulse(normalized_time: npt.NDArray[float]
+                   ) -> npt.NDArray[complex]:
     """
     Generates a regular gaussian pulse
 
@@ -694,7 +705,6 @@ def raised_cosine_pulse(normalized_time: npt.NDArray[float],
 
     t = normalized_time
     beta = roll_off_factor
-
     pulse = np.sinc(t) * np.cos(np.pi*beta*t)/(1-(2*beta*t)**2)
 
     return pulse
@@ -753,7 +763,8 @@ def sech_pulse(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
     return pulse
 
 
-def sqrt_triangle_pulse(normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
+def sqrt_triangle_pulse(normalized_time: npt.NDArray[float]
+                        ) -> npt.NDArray[complex]:
     """
     Creates sqrt(triangle(t)) pulse
 
@@ -820,8 +831,24 @@ def sqrt_parabola_pulse(
 
 
 def random_pulse(
-        normalized_time: npt.NDArray[float],) -> npt.NDArray[complex]:
+        normalized_time: npt.NDArray[float]) -> npt.NDArray[complex]:
+    """
+    Creates a pulse with a random power and phase profile.
 
+    Creates a random pulse by multiplying a polynomial by a random phase
+    factor and an envelope, which is either a Gaussian or a Sech.
+
+    Parameters
+    ----------
+    normalized_time : npt.NDArray[float]
+        (t_s-t0_s)/duration_s.
+
+    Returns
+    -------
+    pulse : npt.NDArray[complex]
+        Random pulse in the time domain.
+
+    """
 
 
     polynomial_array = np.zeros_like(normalized_time)*1.0
@@ -835,9 +862,9 @@ def random_pulse(
     random_chirp = np.random.uniform(-3,3,1)
     chrip_factor = np.exp(1j*random_chirp*normalized_time**2)
 
-
-
-    for poly_root, freq, phase in zip(random_poly_roots,random_freqs, random_phases):
+    for poly_root, freq, phase in zip(random_poly_roots,
+                                      random_freqs,
+                                      random_phases):
         polynomial_array += (normalized_time-poly_root)
         cos_array *= np.cos(2*pi*freq*normalized_time+phase)
 
@@ -856,38 +883,9 @@ def random_pulse(
     pulse = polynomial_array*envelope*cos_array*chrip_factor
     pulse/=np.max(np.abs(pulse))
 
-
-
     return pulse
 
 
-# def random_pulse(
-#         normalized_time: npt.NDArray[float],) -> npt.NDArray[complex]:
-
-#     random_poly_coeffs = np.random.uniform(-10, 10,8)
-
-#     random_poly = np.polyval(random_poly_coeffs, normalized_time)
-
-#     envelope_list=["gaussian","sech"]
-#     envelope_func_str = np.random.choice(envelope_list)
-
-#     print(envelope_func_str)
-#     envelope = eval(f"{envelope_func_str}_pulse(normalized_time)")
-
-
-#     modulation_freq = np.random.uniform(0,0.5)
-#     random_phase = np.random.uniform(0,2*pi)
-
-#     modulation = np.cos(2*np.pi*modulation_freq*normalized_time+random_phase)
-
-#     print(random_poly_coeffs)
-#     print(envelope_func_str)
-#     print(modulation_freq)
-
-#     pulse = random_poly*envelope*modulation
-#     pulse/=np.max(np.abs(pulse))
-
-#     return pulse
 
 def noise_ASE(
         time_s: npt.NDArray[float],
@@ -1028,13 +1026,10 @@ def get_pulse(
     return (1+0j)*amplitude_sqrt_W*output_pulse*carrier_freq*chirp_factor*phase_factor+noise
 
 
-def get_spectrum_from_pulse(
-    time_s: npt.NDArray[float],
-    pulse_field: npt.NDArray[complex],
-    FFT_tol: float = 1e-7,
-) -> npt.NDArray[complex]:
+def get_spectrum_from_pulse(time_s: npt.NDArray[float],
+                            pulse_field: npt.NDArray[complex],
+                            FFT_tol: float = 1e-7) -> npt.NDArray[complex]:
     """
-
 
     Parameters
     ----------
@@ -1146,54 +1141,106 @@ def get_pulse_from_spectrum(frequency_Hz: npt.NDArray[float],
     return pulse
 
 
-def gaussian_filter_power(freq, center_freq, width):
-    return (1.0+0j)*np.exp(-0.5*((freq-center_freq)/width)**2)
+def gaussian_filter_power(freq_Hz: npt.NDArray[float],
+                          center_freq_Hz: float,
+                          filter_FWHM_Hz: float):
+    """
+    Function generates an ideal Gaussian filter to be applied to an input
+    signal in the frequency domain. To apply the filter correctly, the sqrt
+    of the return value must be taken before the result is multiplied onto the
+    field spectrum of the signal.
+
+    Parameters
+    ----------
+    freq : npt.NDArray[float]
+        Absolute frequency array in Hz.
+    center_freq : float
+        Center frequency of filter.
+    filter_FWHM_Hz : float
+        FWHM of Gaussian filter in Hz.
+
+    Returns
+    -------
+    npt.NDArray[complex]
+        Profile of ideal filter to be applied.
+
+    """
+    return (1.0+0j)*np.exp(-0.5*((freq_Hz-center_freq_Hz)/filter_FWHM_Hz)**2)
 
 
-def square_filter_power(freq, center_freq, width):
-    return (1.0+0j)*np.exp(-0.5*((freq-center_freq)/width)**80)
+def square_filter_power(freq_Hz: npt.NDArray[float],
+                        center_freq_Hz: float,
+                        filter_width_Hz: float):
+    """
+    Function generates an ideal Square filter to be applied to an input
+    signal in the frequency domain. To apply the filter correctly, the sqrt
+    of the return value must be taken before the result is multiplied onto the
+    field spectrum of the signal.
+
+    Parameters
+    ----------
+    freq : npt.NDArray[float]
+        Absolute frequency array in Hz.
+    center_freq : float
+        Center frequency of filter.
+    filter_FWHM_Hz : float
+        Width of Square filter in Hz.
+
+    Returns
+    -------
+    npt.NDArray[complex]
+        Profile of ideal filter to be applied.
+
+    """
+    return (1.0+0j)*np.exp(-0.5*((freq_Hz-center_freq_Hz/filter_width_Hz)**80))
 
 
-@dataclass
-class F:
-    a: float
-    c: float = field(init=False)
-    b: float = 1.2
 
 
-    def __post_init__(self):
-        self.c = self.a+self.b
 
 
-#TODO: Implement separate dataclass for input/output amp and attentuation of
-#      fiber span.
-# @dataclass
-# class FiberInputOutput:
-#     input_atten_dB: float = 0.0
-#     input_filter_power_function_pre_amp=None
-#     input_amp_dB: float = 0.0
-#     input_noise_factor_dB: float = -1e3
-#     input_filter_power_function_post_amp=None
 
-#     output_filter_power_function_pre_amp=None
-#     output_amp_dB: float = 0.0
-#     output_noise_factor_dB: float = -1e3
-#     output_filter_power_function_post_amp=None
-#     output_atten_dB: float = 0.0
+def no_filter(freq_Hz: npt.NDArray[float]):
+    """
+    Function generates a dummy filter with no attenuation.
 
-#     def __post_init__(self):
-#         pass
+    Parameters
+    ----------
+    freq_Hz : npt.NDArray[float]
+        Absolute frequency array in Hz.
 
-def no_filter(freq):
-    return (1+0j)*np.ones_like(freq)
+    Returns
+    -------
+    npt.NDArray[complex]
+        Profile of dummy filter with no attenuation.
+
+    """
+    return (1+0j)*np.ones_like(freq_Hz)
 
 
-def zero_func(freq):
-    return (1+0j)*np.zeros_like(freq)
+def zero_func(freq_Hz: npt.NDArray[float]):
+    """
+    Function generates an array of zeros with the same dimension as the
+    specified frequency array.
+
+    Parameters
+    ----------
+    freq_Hz : npt.NDArray[float]
+        Absolute frequency array in Hz.
+
+    Returns
+    -------
+    npt.NDArray[complex]
+        Profile of dummy filter with no attenuation.
+
+    """
+    return (1+0j)*np.zeros_like(freq_Hz)
 
 @dataclass
 class FiberSpan:
-    #TODO: Redo docstring
+    """
+
+    """
 
     #init
     length_m: float
@@ -1699,10 +1746,10 @@ class InputSignal:
 
 
 
-        scalingFactor, prefix = get_units(self.time_freq.f_Hz()[-1])
+        scalingFactor, prefix = get_units(self.time_freq.f_rel_Hz()[-1])
         fig, ax = plt.subplots(dpi=300)
         ax.set_title(f'Input signal for {self.pulse_type} in freq domain')
-        ax.plot(-self.time_freq.f_Hz()/scalingFactor,
+        ax.plot(-self.time_freq.f_rel_Hz()/scalingFactor,
                 get_power(self.spectrum_field), '.')
         ax.set_xlabel(f'Freq [{prefix}Hz]')
         ax.set_ylabel('Energy dens. [J/Hz]')
@@ -2422,7 +2469,7 @@ def get_NL_factor_full(fiber: FiberSpan,
                        dz_m: float) -> npt.NDArray[complex]:
     # TODO: Implement Raman effect for both long and short-duration pulses
     fR = fiber.fR
-    freq = time_freq.f_Hz()
+    freq = time_freq.f_rel_Hz()
     t = time_freq.t_s()
 
 
@@ -2527,7 +2574,7 @@ def SSFM(
 
     t = input_signal.time_freq.t_s()
     # dt = input_signal.time_freq.t_s()ime_step_s
-    f = input_signal.time_freq.f_Hz()
+    f = input_signal.time_freq.f_rel_Hz()
     df = input_signal.time_freq.freq_step_Hz
     fc = input_signal.time_freq.center_frequency_Hz
 
@@ -2588,7 +2635,7 @@ def SSFM(
         os.chdir(current_dir)
 
         # Pre-calculate dispersion term
-        dispterm = np.zeros_like(input_signal.time_freq.f_Hz()) * 1.0
+        dispterm = np.zeros_like(input_signal.time_freq.f_rel_Hz()) * 1.0
         for idx, beta_n in enumerate(fiber.beta_list):
             n = idx + 2  # Note: zeroth entry in beta_list is beta2
             # Minus must be included for f due to -i*omega*t sign convention
@@ -2657,7 +2704,7 @@ def SSFM(
         spectrum *= np.sqrt(fiber.input_filter_power_function(-f+fc))
 
         pulse = get_pulse_from_spectrum(
-            input_signal.time_freq.f_Hz(), spectrum, FFT_tol=FFT_tol)
+            input_signal.time_freq.f_rel_Hz(), spectrum, FFT_tol=FFT_tol)
 
         #
         # Start loop
@@ -3658,7 +3705,7 @@ def plot_photon_number(ssfm_result_list: list[SSFMResult]):
 
     photon_number_array = np.zeros(len(zvals)) * 1.0
 
-    f = -time_freq.f_Hz()+center_freq_Hz  # Minus must be included here due to -i*omega*t sign convention
+    f = -time_freq.f_rel_Hz()+center_freq_Hz  # Minus must be included here due to -i*omega*t sign convention
 
 
     photon_number_array = get_photon_number(f, spectrum_matrix)
@@ -4330,7 +4377,7 @@ def get_channel_SNR_dB(ssfm_result_list: list[SSFMResult],
         ssfm_result_list,
         zvals,
         "spectrum")
-    freqs = time_freq.f_Hz() + time_freq.center_frequency_Hz
+    freqs = time_freq.f_rel_Hz() + time_freq.center_frequency_Hz
 
     outputArray = np.zeros_like(zvals) * 1.0
 
@@ -4366,7 +4413,7 @@ def get_final_SNR_dB(ssfm_result_list: list[SSFMResult],
     """
 
     freqs = (
-        ssfm_result_list[0].input_signal.time_freq.f_Hz()
+        ssfm_result_list[0].input_signal.time_freq.f_rel_Hz()
         + ssfm_result_list[0].input_signal.time_freq.center_frequency_Hz
     )
     finalSpectrum = ssfm_result_list[-1].spectrum_field_matrix[-1, :]
@@ -4513,7 +4560,7 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
     N = 2 ** 14  # Number of points
-    dt = 1e-12  # Time resolution [s]
+    dt = 10e-15  # Time resolution [s]
 
     center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(number_of_points=N,
@@ -4528,45 +4575,30 @@ if __name__ == "__main__":
 
     # Set up signal
     test_FFT_tol = 1e-3
-    test_amplitude = 0.8
-    test_pulse_type = "custom"
-    test_duration_s = 1e-9
-    test_freq_offset_Hz = 10e9
+    test_amplitude_sqrt_W = 4.8*np.sqrt(2)
+    test_pulse_type = "sech"
+    test_duration_s = 1e-12
+    test_freq_offset_Hz =0
 
 
     test_input_signal = InputSignal(time_freq_test,
                                     test_duration_s,
-                                    test_amplitude,
+                                    test_amplitude_sqrt_W,
                                     test_pulse_type,
                                     freq_offset_Hz=test_freq_offset_Hz,
                                     FFT_tol=test_FFT_tol)
 
-    test_input_signal.pulse_field+= get_pulse(time_freq_test.t_s(),
-                                              test_duration_s,
-                                              0,
-                                              test_amplitude,
-                                              pulse_type='cw',
-                                              freq_offset_Hz=test_freq_offset_Hz)
 
-    test_input_signal.pulse_field+= get_pulse(time_freq_test.t_s(),
-                                          test_duration_s,
-                                          0,
-                                          test_amplitude,
-                                          pulse_type='cw',
-                                          freq_offset_Hz=-test_freq_offset_Hz)
-
-    test_input_signal.update_spectrum()
-    test_input_signal.describe_input_signal()
 
 
 
 
 
     alpha_test = 0#-0.22/1e3  # dB/m
-    beta_list = [0]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    beta_list = [BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
     gamma_test = 1e-3  # 1/W/m
     length_test = 1e3  # m
-    number_of_steps = 2**9
+    number_of_steps = 2**8
 
     fiber_test = FiberSpan(
         length_test,
@@ -4582,7 +4614,7 @@ if __name__ == "__main__":
 
 
     # Run SSFM
-    exp_name = f"FWM_test"
+    exp_name = f"soliton_test"
 
 
     ssfm_result_list = SSFM(
@@ -4594,7 +4626,7 @@ if __name__ == "__main__":
     )
 
 
-    nrange = 2000
+    nrange = 1000
     dB_cutoff = -60
 
 
@@ -4605,3 +4637,5 @@ if __name__ == "__main__":
         nrange,
         dB_cutoff,
         show_3D_plot_flag=False)
+
+    #make_chirp_gif(ssfm_result_list, nrange,chirpRange_GHz=[-100,100])
