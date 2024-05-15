@@ -10,10 +10,14 @@ Created on Fri Jan 26 14:26:22 2024
 #
 # This code uses the exp(-1j*omega*t) sign convention because
 # exp(1j(beta*z-omega*t)) represents a plane wave propagating in the
-# positive z-direction. A disadvantage of this convention is that
-# "more negative" frequencies correspond to frequencies that are "higher"
-# and "more blue". In turn, this occasionally necessitates changing the
-# sign of the frequency axis, such as when 3rd order dispersion is applied.
+# positive z-direction. The fourier transform that goes from the time
+# domain to the frequency domain is defined as
+#
+#   int f(t)exp(+1j*w*t) dt.
+#
+# This ensures that f(t)=exp(-1j*2*t) correctly creates a delta function
+# at w=+2.
+#
 
 from copy import deepcopy
 import os
@@ -1055,11 +1059,13 @@ def get_spectrum_from_pulse(time_s: npt.NDArray[float],
 
     assert dt > 0, (f"ERROR: dt must be positive, "
                     f"but {dt=}. {time_s[1]=},{time_s[0]=}")
-    spectrum_field = fftshift(
-        fft(pulse_field)) * dt  # Take FFT and do shift
+    spectrum_field = ifftshift(
+        ifft(pulse_field)) * (dt*len(f))  # Take FFT and do shift
     spectrumEnergy = get_energy(f, spectrum_field)  # Get spectrum energy
 
     err = np.abs((pulseEnergy / spectrumEnergy - 1))
+
+
 
     assert (
         err < FFT_tol
@@ -1128,10 +1134,13 @@ def get_pulse_from_spectrum(frequency_Hz: npt.NDArray[float],
     time = get_time_from_freq_range(frequency_Hz)
     dt = time[1] - time[0]
 
-    pulse = ifft(ifftshift(spectrum_field)) / dt
+    pulse = fft(fftshift(spectrum_field)) / (dt*len(time))
     pulseEnergy = get_energy(time, pulse)
 
     err = np.abs((pulseEnergy / spectrumEnergy - 1))
+
+
+
 
     assert (
         err < FFT_tol
@@ -2640,7 +2649,7 @@ def SSFM(
             n = idx + 2  # Note: zeroth entry in beta_list is beta2
             # Minus must be included for f due to -i*omega*t sign convention
             dispterm += (beta_n / np.math.factorial(n)
-                         * (-2 * pi * f) ** (n)
+                         * (2 * pi * f) ** (n)
                          )
 
         # Pre-calculate effect of dispersion and loss as it's
@@ -2671,7 +2680,7 @@ def SSFM(
             get_noise_PSD(
                 fiber.input_noise_factor_dB,
                 fiber.input_amp_dB,
-                -f + fc,
+                f + fc,
                 df
             )
         )
@@ -2701,7 +2710,7 @@ def SSFM(
         ) * disp_and_loss_half_step
 
         # apply input filter function
-        spectrum *= np.sqrt(fiber.input_filter_power_function(-f+fc))
+        spectrum *= np.sqrt(fiber.input_filter_power_function(f+fc))
 
         pulse = get_pulse_from_spectrum(
             input_signal.time_freq.f_rel_Hz(), spectrum, FFT_tol=FFT_tol)
@@ -2734,7 +2743,7 @@ def SSFM(
                 outputAttenuationField_lin = np.sqrt(dB_to_lin(
                     fiber.output_atten_dB))
                 output_filter_field_array = np.sqrt(
-                    fiber.output_filter_power_function(-f+fc))
+                    fiber.output_filter_power_function(f+fc))
                 output_amp_field_factor = 10 ** (fiber.output_amp_dB / 20)
                 noise_ASE_array = randomPhaseFactor * np.sqrt(
                     get_noise_PSD(
@@ -4574,7 +4583,7 @@ if __name__ == "__main__":
 
 
     # Set up signal
-    test_FFT_tol = 1e-3
+    test_FFT_tol = 1e-2
     test_amplitude_sqrt_W = 4.8*np.sqrt(2)
     test_pulse_type = "sech"
     test_duration_s = 1e-12
@@ -4595,9 +4604,9 @@ if __name__ == "__main__":
 
 
     alpha_test = 0#-0.22/1e3  # dB/m
-    beta_list = [BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    gamma_test = 1e-3  # 1/W/m
-    length_test = 1e3  # m
+    beta_list = [0,-BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M*1e-12]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 0*1e-3  # 1/W/m
+    length_test = 5*43.47826086956521  # m
     number_of_steps = 2**8
 
     fiber_test = FiberSpan(

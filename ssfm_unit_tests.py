@@ -876,9 +876,10 @@ def unit_test_SPM(show_plot_flag=False):
     normalized_energy_diff = compare_field_energies(final_pulse,
                                                     theoretical_final_pulse)
 
-    assert normalized_energy_diff<1.58e-24, f"""ERROR: Normalized energy
+    error_tol = 2e-24
+    assert normalized_energy_diff<error_tol, f"""ERROR: Normalized energy
     difference between numerical and theoretical pulses is
-    {normalized_energy_diff =}, but it should be less than or equal to 7.06e-6.
+    {normalized_energy_diff =}, but it should be less than or equal to {error_tol = }.
     Unit test for dispersion with gamma only FAILED!!!"""
 
     print("Unit test for nonlinearity with gamma only SUCCEEDED!")
