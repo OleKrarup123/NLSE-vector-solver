@@ -210,7 +210,7 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
     N = 2 ** 15  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1550_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
@@ -248,8 +248,8 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
                                     test_duration_s,
                                     test_amplitude,
                                     test_pulse_type,
-                                    FFT_tol=test_FFT_tol,
-                                    describe_input_signal_flag=False)
+                                    describe_input_signal_flag=False,
+                                    FFT_tol=test_FFT_tol)
 
 
 
@@ -259,8 +259,7 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
+        experiment_name=exp_name
     )
 
     time_freq_loaded = load_TimeFreq(ssfm_result_list[0].dirs[1])
@@ -301,7 +300,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
     N = 2 ** 15  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1550_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
@@ -396,8 +395,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
+        experiment_name=exp_name
     )
 
 
@@ -433,7 +431,7 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
     N = 2 ** 15  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1550_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
@@ -485,8 +483,7 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
+        experiment_name=exp_name
     )
 
 
@@ -519,8 +516,7 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
+        experiment_name=exp_name
     )
 
 
@@ -574,7 +570,7 @@ def unit_test_beta2(show_plot_flag=False):
     N = 2 ** 15  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1550_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
@@ -621,8 +617,7 @@ def unit_test_beta2(show_plot_flag=False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
+        experiment_name=exp_name
     )
     final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
     theoretical_final_pulse = gaussian_pulse_with_beta_2_only(time_freq_test.t_s(),
@@ -681,7 +676,7 @@ def unit_test_beta3(show_plot_flag=False):
     N = 2 ** 15  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1550_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
@@ -733,8 +728,7 @@ def unit_test_beta3(show_plot_flag=False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
+        experiment_name=exp_name
     )
     final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
 
@@ -782,7 +776,7 @@ def unit_test_SPM(show_plot_flag=False):
     N = 2 ** 15  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1550_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
@@ -829,8 +823,7 @@ def unit_test_SPM(show_plot_flag=False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
+        experiment_name=exp_name
     )
     final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
     initial_pulse = np.copy(ssfm_result_list[0].pulse_matrix[0,:])
@@ -983,8 +976,7 @@ def unit_test_self_steepening(show_plot_flag=False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=expName,
-        FFT_tol=test_FFT_tol
+        experiment_name=expName
     )
     final_pulse = ssfm_result_list[0].pulse_matrix[-1,:]
     initial_pulse = ssfm_result_list[0].pulse_matrix[0,:]
@@ -1046,7 +1038,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
     N = 2 ** 14  # Number of points
     dt = 100e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1550_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
@@ -1102,9 +1094,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
         fiber_link,
         test_input_signal,
         show_progress_flag=False,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
-    )
+        experiment_name=exp_name    )
 
     final_photon_number = get_photon_number(f,
                                             ssfm_result_list[-1].spectrum_field_matrix)[-1]

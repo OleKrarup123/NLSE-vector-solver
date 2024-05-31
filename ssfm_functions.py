@@ -50,8 +50,9 @@ FREQ_MAX_C_BAND_HZ = 196.15 * 1e12
 FREQ_WIDTH_C_BAND_HZ = FREQ_MAX_C_BAND_HZ - FREQ_MIN_C_BAND_HZ
 FREQ_CENTER_C_BAND_HZ = (FREQ_MIN_C_BAND_HZ + FREQ_MAX_C_BAND_HZ) / 2
 
-FREQ_1550_NM_Hz = 193414489032258.06
+FREQ_1550_NM_HZ = 193414489032258.06
 FREQ_1310_NM_HZ = 228849204580152.7
+FREQ_1060_NM_HZ = 282823073584905.6
 
 BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M = -23e-27
 BETA2_AT_1625_NM_TYPICAL_SMF_S2_PER_M = -28.1e-27
@@ -95,6 +96,160 @@ def get_freq_range_from_time(time_s: npt.NDArray[float]
 
     """
     return fftshift(fftfreq(len(time_s), d=time_s[1] - time_s[0]))
+
+def get_time_from_freq_range(frequency_Hz: npt.NDArray[float]
+                             ) -> npt.NDArray[float]:
+    """
+    Calculate time range for pulse based on frequency range.
+
+    Essentially the inverse of the get_freq_range_from_time function.
+    If we have a frequency range and take the iFFT of a spectrum field
+    to get the pulse field in the time domain, this function provides the
+    appropriate time range.
+
+    Parameters
+    ----------
+    frequency_Hz : npt.NDArray[float]
+        Freq. range in Hz.
+
+    Returns
+    -------
+    time_s : npt.NDArray[float]
+        Time range in s.
+
+    """
+
+    time_s = fftshift(fftfreq(len(frequency_Hz),
+                              d=frequency_Hz[1] - frequency_Hz[0]))
+    return time_s
+
+def get_spectrum_from_pulse(time_s: npt.NDArray[float],
+                            pulse_field: npt.NDArray[complex],
+                            FFT_tol: float = 1e-7) -> npt.NDArray[complex]:
+    """
+
+    Parameters
+    ----------
+    time_s : npt.NDArray[float]
+        Time range in seconds.
+    pulse_field: npt.NDArray[complex]
+        Complex field of pulse in time domain in units of sqrt(W).
+    FFT_tol : float, optional
+        When computing the FFT and going from temporal to spectral domain, the
+        energy (which theoretically should be conserved) cannot change
+        fractionally by more than FFT_tol. The default is 1e-7.
+
+    Returns
+    -------
+    spectrum_field : npt.NDArray[complex]
+        Complex spectral field in units of sqrt(J/Hz).
+
+    """
+
+
+
+    pulseEnergy = get_energy(time_s, pulse_field)  # Get pulse energy
+    f = get_freq_range_from_time(time_s)
+    dt = time_s[1] - time_s[0]
+
+    assert dt > 0, (f"ERROR: dt must be positive, "
+                    f"but {dt=}. {time_s[1]=},{time_s[0]=}")
+    #spectrum_field =ifftshift(ifft(pulse_field)) * (dt*len(f)) # Do shift and take fft
+    spectrum_field =ifftshift(ifft(ifftshift(pulse_field))) * (dt*len(f)) # Do shift and take fft
+    spectrumEnergy = get_energy(f, spectrum_field)  # Get spectrum energy
+
+    err = np.abs((pulseEnergy / spectrumEnergy - 1))
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(time_s, pulse_field)
+    # plt.show()
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(f/1e12, '.')
+    # #ax.set_xlim(-10,10)
+    # plt.show()
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(spectrum_field, '.')
+    # #ax.set_xlim(-10,10)
+    # plt.show()
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(f/1e12,spectrum_field, '.')
+    # #ax.set_xlim(-10,10)
+    # plt.show()
+
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(f/1e12,ifftshift(ifft(ifftshift(pulse_field*np.exp(-1j*2*pi*100e12*time_s)))))
+    # #ax.set_xlim(-50,50)
+    # plt.show()
+    #assert (1==2)
+    assert (
+        err < FFT_tol
+    ), (f"ERROR = {err:.3e} > {FFT_tol:.3e} = FFT_tol : Energy changed "
+        "when going from Pulse to Spectrum!!!")
+
+    return spectrum_field
+
+
+
+
+def get_pulse_from_spectrum(frequency_Hz: npt.NDArray[float],
+                            spectrum_field: npt.NDArray[complex],
+                            FFT_tol: float = 1e-7) -> npt.NDArray[complex]:
+    """
+    Converts the spectral field of a signal in the freq. domain temporal
+    field in time domain
+
+    Uses the iFFT to shift from freq. to time domain and ensures that energy
+    is conserved
+
+    Parameters
+    ----------
+    frequency_Hz : npt.NDArray[float]
+        Frequency in Hz.
+    spectrum_field : npt.NDArray[complex]
+        Spectral field in sqrt(J/Hz).
+    FFT_tol : float, optional
+        Maximum fractional change in signal
+        energy when doing FFT. The default is 1e-7.
+
+    Returns
+    -------
+    pulse : npt.NDArray[complex]
+        Temporal field in sqrt(W).
+
+    """
+
+    spectrumEnergy = get_energy(frequency_Hz, spectrum_field)
+
+    time = get_time_from_freq_range(frequency_Hz)
+    dt = time[1] - time[0]
+
+
+
+
+    pulse = fftshift(fft(fftshift(spectrum_field))) / (dt*len(time))
+    pulseEnergy = get_energy(time, pulse)
+
+    err = np.abs((pulseEnergy / spectrumEnergy - 1))
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(frequency_Hz,spectrum_field)
+    # plt.plot()
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(time,pulse)
+    # plt.plot()
+
+    assert (
+        err < FFT_tol
+    ), (f"ERROR = {err:.3e} > {FFT_tol:.3e} = FFT_tol : Energy changed too "
+        "much when going from Spectrum to Pulse!!!")
+    return pulse
+
+
 
 
 def get_phase(pulse: npt.NDArray[complex]) -> npt.NDArray[float]:
@@ -351,7 +506,7 @@ class TimeFreq:
         assert np.min(self.center_frequency_Hz +
                       self.f_rel_Hz()) >= 0, f"""ERROR! Lowest frequency of
         {np.min(self.center_frequency_Hz+self.f_rel_Hz())/1e9:.3f}GHz is below 0.
-        Consider increasing the center frequency!"""
+        Consider increasing the center frequency or reducing the time resolution!"""
 
         if self.describe_time_freq_flag:
             self.describe_config()
@@ -414,7 +569,7 @@ class TimeFreq:
         f_rel_Hz : npt.NDArray[float].
 
         """
-        return -self.f_rel_Hz()+self.center_frequency_Hz
+        return self.f_rel_Hz()+self.center_frequency_Hz
 
     def describe_config(self,
                         destination=None):
@@ -1030,124 +1185,7 @@ def get_pulse(
     return (1+0j)*amplitude_sqrt_W*output_pulse*carrier_freq*chirp_factor*phase_factor+noise
 
 
-def get_spectrum_from_pulse(time_s: npt.NDArray[float],
-                            pulse_field: npt.NDArray[complex],
-                            FFT_tol: float = 1e-7) -> npt.NDArray[complex]:
-    """
 
-    Parameters
-    ----------
-    time_s : npt.NDArray[float]
-        Time range in seconds.
-    pulse_field: npt.NDArray[complex]
-        Complex field of pulse in time domain in units of sqrt(W).
-    FFT_tol : float, optional
-        When computing the FFT and going from temporal to spectral domain, the
-        energy (which theoretically should be conserved) cannot change
-        fractionally by more than FFT_tol. The default is 1e-7.
-
-    Returns
-    -------
-    spectrum_field : npt.NDArray[complex]
-        Complex spectral field in units of sqrt(J/Hz).
-
-    """
-
-    pulseEnergy = get_energy(time_s, pulse_field)  # Get pulse energy
-    f = get_freq_range_from_time(time_s)
-    dt = time_s[1] - time_s[0]
-
-    assert dt > 0, (f"ERROR: dt must be positive, "
-                    f"but {dt=}. {time_s[1]=},{time_s[0]=}")
-    spectrum_field = ifftshift(
-        ifft(pulse_field)) * (dt*len(f))  # Take FFT and do shift
-    spectrumEnergy = get_energy(f, spectrum_field)  # Get spectrum energy
-
-    err = np.abs((pulseEnergy / spectrumEnergy - 1))
-
-
-
-    assert (
-        err < FFT_tol
-    ), (f"ERROR = {err:.3e} > {FFT_tol:.3e} = FFT_tol : Energy changed "
-        "when going from Pulse to Spectrum!!!")
-
-    return spectrum_field
-
-
-def get_time_from_freq_range(frequency_Hz: npt.NDArray[float]
-                             ) -> npt.NDArray[float]:
-    """
-    Calculate time range for pulse based on frequency range.
-
-    Essentially the inverse of the get_freq_range_from_time function.
-    If we have a frequency range and take the iFFT of a spectrum field
-    to get the pulse field in the time domain, this function provides the
-    appropriate time range.
-
-    Parameters
-    ----------
-    frequency_Hz : npt.NDArray[float]
-        Freq. range in Hz.
-
-    Returns
-    -------
-    time_s : npt.NDArray[float]
-        Time range in s.
-
-    """
-
-    time_s = fftshift(fftfreq(len(frequency_Hz),
-                              d=frequency_Hz[1] - frequency_Hz[0]))
-    return time_s
-
-
-def get_pulse_from_spectrum(frequency_Hz: npt.NDArray[float],
-                            spectrum_field: npt.NDArray[complex],
-                            FFT_tol: float = 1e-7) -> npt.NDArray[complex]:
-    """
-    Converts the spectral field of a signal in the freq. domain temporal
-    field in time domain
-
-    Uses the iFFT to shift from freq. to time domain and ensures that energy
-    is conserved
-
-    Parameters
-    ----------
-    frequency_Hz : npt.NDArray[float]
-        Frequency in Hz.
-    spectrum_field : npt.NDArray[complex]
-        Spectral field in sqrt(J/Hz).
-    FFT_tol : float, optional
-        Maximum fractional change in signal
-        energy when doing FFT. The default is 1e-7.
-
-    Returns
-    -------
-    pulse : npt.NDArray[complex]
-        Temporal field in sqrt(W).
-
-    """
-
-    spectrumEnergy = get_energy(frequency_Hz, spectrum_field)
-
-    time = get_time_from_freq_range(frequency_Hz)
-    dt = time[1] - time[0]
-
-    pulse = fft(fftshift(spectrum_field)) / (dt*len(time))
-    pulseEnergy = get_energy(time, pulse)
-
-    err = np.abs((pulseEnergy / spectrumEnergy - 1))
-
-
-
-
-    assert (
-        err < FFT_tol
-    ), (f"ERROR = {err:.3e} > {FFT_tol:.3e} = FFT_tol : Energy changed too "
-        "much when going from Spectrum to Pulse!!!")
-
-    return pulse
 
 
 def gaussian_filter_power(freq_Hz: npt.NDArray[float],
@@ -1266,8 +1304,8 @@ class FiberSpan:
     use_self_steepening: bool = False
     raman_model: str = "None"
     fR: float = 0.0
-    tau1: float = 0.0
-    tau2: float = 0.0
+    tau_vib: float = 0.0
+    tau_l: float = 0.0
     input_atten_dB: float = 0.0
     input_amp_dB: float = 0.0
     input_noise_factor_dB: float = -1e3
@@ -1302,33 +1340,37 @@ class FiberSpan:
             self.raman_model = None
 
         self.fR = 0.0
-        self.tau1 = 0.0
-        self.tau2 = 0.0
+        self.tau_vib = 0.0
+        self.tau_l = 0.0
 
-        self.raman_in_freq_domain_func = zero_func
+        self.raman_in_time_domain_func = zero_func
 
         if self.raman_model is None:
-            self.raman_in_freq_domain_func = zero_func
+            self.raman_in_time_domain_func = zero_func
 
         # Raman parameters taken from Govind P. Agrawal's book,
         # "Nonlinear Fiber Optics".
 
-        elif str(self.raman_model).lower() == "agrawal":
-            self.fR = (
-                0.180  # Relative contribution of Raman effect to overall nonlinearity
-            )
-            # Average angular oscillation time of molecular bonds in silica lattice. Note: 1/(2*pi*12.2fs) = 13.05THz = Typical Raman frequency
-            self.tau1 = 12.2 * 1e-15
-            # Average exponential decay time of molecular bond oscilaltions. Note: 2*1/(2*pi*30.0fs) = 10.61 THz = Typical Raman gain spectrum FWHM
-            self.tau2 = 30.0 * 1e-15
+        elif str(self.raman_model).lower() == "approximate":
+            self.raman_in_time_domain_func = zero_func
 
-            # Frequency domain representation of Raman response taken from https://github.com/omelchert/GNLStools/blob/main/src/GNLStools.py
-            self.raman_in_freq_domain_func = lambda freq: (
-                self.tau1 ** 2 + self.tau2 ** 2
-            ) / (
-                self.tau1 ** 2 * (1 - 1j * freq * 2 * pi * self.tau2) ** 2
-                + self.tau2 ** 2
-            )  # Freq domain representation of Raman response
+        elif str(self.raman_model).lower() == "agrawal":
+            # Relative contribution of Raman effect to overall nonlinearity
+            self.fR = 0.18
+
+            # Average angular oscillation time of molecular bonds in silica
+            # lattice. Note: 1/(2*pi*12.2fs) = 13.05THz = Typical Raman
+            # frequency
+            self.tau_vib = 12.2 * 1e-15
+
+            # Average exponential decay time of molecular bond oscilaltions. Note: 2*1/(2*pi*32.0fs) = 10 THz = Typical Raman gain spectrum FWHM
+            self.tau_l = 32.0 * 1e-15
+
+            self.raman_in_time_domain_func = lambda t_delay: (
+                (1/self.tau_vib**2+1/self.tau_l**2)*self.tau_vib*(
+                    np.exp(-t_delay/self.tau_l*np.heaviside(t_delay,0))*(
+                        np.sin(t_delay/self.tau_vib)*np.heaviside(t_delay,0)))
+                )
 
 
 
@@ -1397,7 +1439,7 @@ class FiberSpan:
         print(f"\t\tFiber gamma [1/W/m] \t= {self.gamma_per_W_per_m} ", file=d)
         print(f"\t\tFiber self steepening \t= {self.use_self_steepening} ", file=d)
         print(f"\t\tRaman Model \t\t\t= {self.raman_model}.")
-        print(f"\t\t(fR,tau1 [fs],tau2[fs])\t= ({self.fR:.3},{self.tau1/1e-15:.3},{self.tau2/1e-15:.3})",file=d)
+        print(f"\t\t(fR,tau_vib [fs],tau_l[fs])\t= ({self.fR:.3},{self.tau_vib/1e-15:.3},{self.tau_l/1e-15:.3})",file=d)
 
         print(" ", file=d)
 
@@ -1748,8 +1790,8 @@ class InputSignal:
         ax.set_ylabel('Power [W]')
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.set_xlim(-1*self.duration_s/scalingFactor,
-                    1*self.duration_s/scalingFactor)
+        ax.set_xlim(-3*self.duration_s/scalingFactor,
+                    3*self.duration_s/scalingFactor)
         plt.show()
 
 
@@ -2405,10 +2447,10 @@ def load_previous_run(basePath: str) -> [FiberLink, InputSignal]:
     return fiber_link, input_signal
 
 
-def get_NL_factor_simple(fiber: FiberSpan,
+def get_NL_factor_no_self_steepening_no_raman(fiber: FiberSpan,
                          time_freq: TimeFreq,
                          pulse: npt.NDArray[complex],
-                         dz_m: float) -> npt.NDArray[complex]:
+                         FFT_tol = 1e-7) -> npt.NDArray[complex]:
     """
     Calculates nonlinear phase shift in time domain for the simple, scalar case
     without Raman
@@ -2424,6 +2466,8 @@ def get_NL_factor_simple(fiber: FiberSpan,
         Pulse whose power determines the nonlinear phase shift.
     dz : float
         Step size in m in the z-direction.
+    FFT_tol : float
+        Unused in this function but included for consistency.
 
     Returns
     -------
@@ -2432,13 +2476,16 @@ def get_NL_factor_simple(fiber: FiberSpan,
 
     """
 
-    return np.exp(1j * fiber.gamma_per_W_per_m * get_power(pulse) * dz_m)
+    return np.exp(1j * fiber.gamma_per_W_per_m * get_power(pulse) * fiber.dz_m)
 
 
-def get_NL_factor_self_steepening(fiber: FiberSpan,
+
+
+def get_NL_factor_self_steepening_no_raman(fiber: FiberSpan,
                                   time_freq: TimeFreq,
                                   pulse: npt.NDArray[complex],
-                                  dz_m: float) -> npt.NDArray[complex]:
+                                  FFT_tol: float = 1e-7
+                                  ) -> npt.NDArray[complex]:
     """
     Calculates nonlinear phase shift in time domain for the simple, scalar case
     without Raman, but with self-steepening.
@@ -2457,6 +2504,8 @@ def get_NL_factor_self_steepening(fiber: FiberSpan,
         Pulse whose power determines the nonlinear phase shift.
     dz : float
         Step size in m in the z-direction.
+    FFT_tol : float
+        Unused in this function but included for consistency.
 
     Returns
     -------
@@ -2464,9 +2513,114 @@ def get_NL_factor_self_steepening(fiber: FiberSpan,
         Array of complex exponentials to be applied to signal.
 
     """
+    dz_m = fiber.dz_m
     pulse_power = get_power(pulse)
-    output = np.exp(1j * fiber.gamma_per_W_per_m*(pulse_power+1j/2/np.pi/time_freq.center_frequency_Hz /
-                    (pulse+np.sqrt(np.max(pulse_power))/1e6*(1+0j))*np.gradient(pulse_power*pulse, time_freq.t_s())) * dz_m)
+
+    safety_factor = np.sqrt(np.max(pulse_power))/1e6*(1+0j)
+    self_steepening_term =( 1j*np.gradient(pulse_power*pulse, time_freq.t_s())
+                           /(2*np.pi*time_freq.center_frequency_Hz *
+                             (pulse+safety_factor)) )
+
+    output =  np.exp(1j * fiber.gamma_per_W_per_m*dz_m*(pulse_power+
+                                                        self_steepening_term))
+
+
+
+    return output
+
+
+
+def get_NL_factor_no_self_steepening_approx_raman(fiber: FiberSpan,
+                                  time_freq: TimeFreq,
+                                  pulse: npt.NDArray[complex],
+                                  FFT_tol: float = 1e-7
+                                  ) -> npt.NDArray[complex]:
+    """
+    Calculates nonlinear phase shift in time domain for the simple, scalar case
+    with raman for a pulse that is much longer than the duration of the Raman
+    response function, but with self steepening ignored.
+
+
+    Parameters
+    ----------
+    fiber : FiberSpan
+        Fiber that we are currently propagating through.
+    timeFreq : TimeFreq
+        Unused in this function but keep it so this function has the same
+        arguments as get_NL_factor_full.
+    pulse : np.array([complex])
+        Pulse whose power determines the nonlinear phase shift.
+
+    FFT_tol : float
+        Unused in this function but included for consistency.
+
+    Returns
+    -------
+    np.array([complex])
+        Array of complex exponentials to be applied to signal.
+
+    """
+    dz_m = fiber.dz_m
+    pulse_power = get_power(pulse)
+
+
+
+
+    TR = 3e-15
+    raman_term =TR * np.gradient(pulse_power, time_freq.t_s())
+
+    output =  np.exp(1j * fiber.gamma_per_W_per_m*dz_m*(pulse_power-raman_term))
+
+
+
+    return output
+
+
+def get_NL_factor_self_steepening_approx_raman(fiber: FiberSpan,
+                                  time_freq: TimeFreq,
+                                  pulse: npt.NDArray[complex],
+                                  FFT_tol: float = 1e-7
+                                  ) -> npt.NDArray[complex]:
+    """
+    Calculates nonlinear phase shift in time domain for the simple, scalar case
+    with raman for a pulse that is much longer than the duration of the Raman
+    response function
+
+
+    Parameters
+    ----------
+    fiber : FiberSpan
+        Fiber that we are currently propagating through.
+    timeFreq : TimeFreq
+        Unused in this function but keep it so this function has the same
+        arguments as get_NL_factor_full.
+    pulse : np.array([complex])
+        Pulse whose power determines the nonlinear phase shift.
+
+    FFT_tol : float
+        Unused in this function but included for consistency.
+
+    Returns
+    -------
+    np.array([complex])
+        Array of complex exponentials to be applied to signal.
+
+    """
+    dz_m = fiber.dz_m
+    pulse_power = get_power(pulse)
+
+    safety_factor = np.sqrt(np.max(pulse_power))/1e6*(1+0j)
+    self_steepening_term =( 1j*np.gradient(pulse_power*pulse, time_freq.t_s())
+                           /(2*np.pi*time_freq.center_frequency_Hz *
+                             (pulse+safety_factor)) )
+
+    TR = 3e-15
+    raman_term =TR * np.gradient(pulse_power, time_freq.t_s())
+
+    output =  np.exp(1j * fiber.gamma_per_W_per_m*dz_m*(pulse_power+
+                                                        self_steepening_term-raman_term))
+
+
 
     return output
 
@@ -2475,34 +2629,109 @@ def get_NL_factor_self_steepening(fiber: FiberSpan,
 def get_NL_factor_full(fiber: FiberSpan,
                        time_freq: TimeFreq,
                        pulse: npt.NDArray[complex],
-                       dz_m: float) -> npt.NDArray[complex]:
+                       FFT_tol = 1e-7) -> npt.NDArray[complex]:
     # TODO: Implement Raman effect for both long and short-duration pulses
     fR = fiber.fR
     freq = time_freq.f_rel_Hz()
     t = time_freq.t_s()
 
+    f0 = time_freq.center_frequency_Hz
+    raman_in_time_domain = fiber.raman_in_time_domain_func(t)
+    gamma = fiber.gamma_per_W_per_m
+    dz = fiber.dz_m
+
+    pulse_power = get_power(pulse )
+    dt = t[1]-t[0]
+
+
+
+    raman_factor = (1 - fR) * pulse_power  + fR  * signal.fftconvolve(pulse_power,raman_in_time_domain,mode='same')*dt
+
+
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(t/1e-15,raman_in_time_domain,label='Raman response function')
+    # ax.set_xlim(-10,200)
+    # ax.set_xlabel('t [fs]')
+    # ax.set_ylabel('$h_R$($t_{delay}$)')
+
+    # ax.spines["top"].set_visible(False)
+    # ax.spines["right"].set_visible(False)
+    # ax.legend(
+    #     loc="upper center",
+    #     bbox_to_anchor=(0.5, 1.1),
+    #     ncol=2,
+    #     fancybox=True,
+    #     shadow=True,
+    # )
+    # plt.show()
+
+    # spectrum_power = get_power(get_spectrum_from_pulse(t, pulse,FFT_tol=1e-2))
+    # raman_in_freq_domain = get_spectrum_from_pulse(t, raman_in_time_domain,FFT_tol=1e-4)
+    # fig,ax=plt.subplots(dpi=300)
+    # ax.plot(freq/1e12,np.real(raman_in_freq_domain),label='Real part')
+    # ax.plot(freq/1e12,np.imag(raman_in_freq_domain),label='Imaginary part')
+    # ax.plot(freq/1e12,spectrum_power/np.max(spectrum_power),'C3',label='Pulse')
+    # ax.set_xlabel('f-f0 [THz]')
+    # ax.set_ylabel('FFT{$h_R$}(f-f0)')
+
+    # ax.axhline(y=0,linestyle='-',color='k')
+    # ax.set_xlim(-25,25)
+    # #ax.grid()
+    # ax.spines["top"].set_visible(False)
+    # ax.spines["right"].set_visible(False)
+    # ax.legend(
+    #     loc="upper center",
+    #     bbox_to_anchor=(0.5, 1.1),
+    #     ncol=3,
+    #     fancybox=True,
+    #     shadow=True,
+    # )
+    # plt.show()
+    # assert 1==2
+
+    safety_factor = np.sqrt(np.max(pulse_power))/1e6*(1+0j)
+    self_steepening_term =( 1j*np.gradient(raman_factor*pulse, time_freq.t_s())
+                           /(2*np.pi*time_freq.center_frequency_Hz *
+                             (pulse+safety_factor)) )
+
+    output =  np.exp(1j *gamma*dz *(raman_factor+self_steepening_term))
+
+
+    return output
+
+
+
+
+# TODO: Fully implement Raman model
+def get_NL_factor_no_self_steepening_raman(fiber: FiberSpan,
+                       time_freq: TimeFreq,
+                       pulse: npt.NDArray[complex],
+                       FFT_tol = 1e-7) -> npt.NDArray[complex]:
+    # TODO: Implement Raman effect for both long and short-duration pulses
+    fR = fiber.fR
+    freq = time_freq.f_rel_Hz()
+    t = time_freq.t_s()
 
     f0 = time_freq.center_frequency_Hz
-    RamanInFreqDomain = fiber.raman_in_freq_domain_func(freq)
+    raman_in_time_domain = fiber.raman_in_time_domain_func(t)
+    gamma = fiber.gamma_per_W_per_m
+    dz = fiber.dz_m
 
-    def NR_func(current_pulse):
-        return (1 - fR) * get_power(
-            current_pulse
-        ) * current_pulse + fR * current_pulse * get_pulse_from_spectrum(
-            freq, get_spectrum_from_pulse(t, get_power(
-                current_pulse)) * RamanInFreqDomain
-        )
+    pulse_power = get_power(pulse )
+    dt = t[1]-t[0]
 
-    NR_in_freq_domain = (
-        1j
-        * dz_m
-        * fiber.gamma_per_W_per_m
-        * (1.0 + freq / f0)
-        * get_pulse_from_spectrum(freq, NR_func(get_spectrum_from_pulse(time_freq.t_s(), pulse)))
-    )
 
-    return np.exp(get_pulse_from_spectrum(freq, NR_in_freq_domain))
 
+    raman_factor = (1 - fR) * pulse_power  + fR  * signal.fftconvolve(pulse_power,raman_in_time_domain,mode='same')*dt
+
+
+
+
+
+    output =  np.exp(1j *gamma*dz *raman_factor)
+
+
+    return output
 
 # TODO: Make NF and gain frequency dependent?
 def get_noise_PSD(NF_dB: float,
@@ -2548,7 +2777,6 @@ def SSFM(
     input_signal: InputSignal,
     experiment_name: str = "most_recent_run",
     show_progress_flag: bool = False,
-    FFT_tol: float = 1e-7,
 ) -> list[SSFMResult]:
     """
     Runs the Split-Step Fourier method and calculates field throughout fiber
@@ -2580,7 +2808,7 @@ def SSFM(
 
     """
     print("########### Initializing SSFM!!! ###########")
-
+    FFT_tol = input_signal.FFT_tol
     t = input_signal.time_freq.t_s()
     # dt = input_signal.time_freq.t_s()ime_step_s
     f = input_signal.time_freq.f_rel_Hz()
@@ -2664,12 +2892,41 @@ def SSFM(
 
         # TODO: sort out logic for choosing NL function
         if fiber.use_self_steepening:
-            NL_function = get_NL_factor_self_steepening
-        else:
-            NL_function = get_NL_factor_simple
 
-        if fiber.raman_model is not None:
-            NL_function = get_NL_factor_full
+            if str(fiber.raman_model).lower() != 'none':
+                if fiber.raman_model == 'approximate':
+                    print("Using nonlinear model with self steepening and approximate Raman")
+                    NL_function = get_NL_factor_self_steepening_approx_raman
+                else:
+                    print("Using nonlinear model with self steepening and full Raman")
+                    NL_function = get_NL_factor_full
+
+            else:
+                print("Using nonlinear model with self steepening and no Raman")
+                NL_function = get_NL_factor_self_steepening_no_raman
+        else:
+            if str(fiber.raman_model).lower() != 'none':
+                if fiber.raman_model == 'approximate':
+                    print("Using nonlinear model with approximate raman and no self steepening")
+                    NL_function = get_NL_factor_no_self_steepening_approx_raman
+                else:
+                    print("Using nonlinear model with full raman and no self steepening")
+                    NL_function = get_NL_factor_no_self_steepening_raman
+
+            else:
+                print("Using nonlinear model without raman and without self steepening")
+                NL_function = get_NL_factor_no_self_steepening_no_raman
+
+
+
+        # if fiber.raman_model is not None:
+        #     print(fiber.raman_model)
+
+        #     if fiber.raman_model == 'approximate':
+        #         NL_function = get_NL_factor_approx_raman
+        #     else:
+
+        #         NL_function = get_NL_factor_full
 
         inputAttenuationField_lin = np.sqrt(dB_to_lin(fiber.input_atten_dB))
 
@@ -2708,6 +2965,7 @@ def SSFM(
                 FFT_tol=FFT_tol,
             ) * inputAttenuationField_lin*input_amp_field_factor+input_noise_ASE_array
         ) * disp_and_loss_half_step
+
 
         # apply input filter function
         spectrum *= np.sqrt(fiber.input_filter_power_function(f+fc))
@@ -3306,6 +3564,13 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
         fancybox=True,
         shadow=True,
     )
+    def f2wl(x):
+        return freq_to_wavelength(x)/1e6
+    def wl2f(x):
+        return wavelength_to_freq(x)*1e6
+
+    ax2 = ax.secondary_xaxis("top", functions=(f2wl,wl2f))
+    ax2.set_xlabel('Wavelength [$\mu$m]')
     save_plot("first_and_last_spectrum")
     plt.show()
     os.chdir(ssfm_result_list[0].dirs[0])
@@ -3349,6 +3614,7 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     # Plot pulse evolution throughout fiber in normalized log scale
     os.chdir(ssfm_result_list[0].dirs[1])
     fig, ax = plt.subplots(dpi=300)
+
     fig.patch.set_facecolor('white')
     ax.set_title("Spectrum Evolution (dB scale)")
     # Minus must be included here due to -i*omega*t sign convention
@@ -3360,7 +3626,16 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     Pf[Pf < 1e-100] = 1e-100
     Pf = 10 * np.log10(Pf)
     Pf[Pf < dB_cutoff] = dB_cutoff
-    surf = ax.contourf(F, Z, Pf, levels=40)
+    surf = ax.contourf(F, Z, Pf, levels=40, cmap="jet")
+
+    def f2wl(x):
+        return freq_to_wavelength(x)/1e6
+    def wl2f(x):
+        return wavelength_to_freq(x)*1e6
+
+    ax2 = ax.secondary_xaxis("top", functions=(f2wl,wl2f))
+    ax2.set_xlabel('Wavelength [$\mu$m]')
+
     ax.set_xlabel("Freq. [THz]")
     ax.set_ylabel("Distance [m]")
     cbar = fig.colorbar(surf, ax=ax)
@@ -3600,6 +3875,215 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
         writer=writer)
 
     os.chdir(ssfm_result_list[0].dirs[0])
+
+
+def make_chirp_gif_2x1(ssfm_result_list_list: list[list[SSFMResult]],
+                   nrange: int,
+                   chirpRange_GHz: list[float] = [-20, 20],
+                   framerate: int = 30):
+    """
+    Animate pulse evolution as .gif and show local chirp
+
+    Animate pulse power evolution and show local chirp by changing line color.
+    Saves result as .gif file.
+    Note: Producing the animation can take a several minutes on a regular
+    PC, so please be patient.
+
+    Parameters
+    ----------
+    ssfm_result_list_list : list[list[SSFMResult]]
+        List of list of ssmf_result_class objects corresponding to each fiber segment.
+    nrange : int
+        How many points on either side of the center do we wish to plot?
+    chirpRange_GHz : list[float], optional
+        Min and Max frequency values in GHz to determine line
+        color. The default is [-20, 20].
+    framerate : int, optional
+        Framerate of .gif animation. May want to reduce this number for
+        simulations with few steps. The default is 30.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    print(
+        "Making .gif anination of pulse evolution. This may "
+        "take a while, so please be patient."
+    )
+
+
+    ssfm_result_list_0=ssfm_result_list_list[0]
+    ssfm_result_list_1=ssfm_result_list_list[1]
+
+
+    os.chdir(ssfm_result_list_0[0].dirs[1])
+    print(f"The .gif animation will be saved in {os.getcwd()}")
+
+
+    timeFreq = ssfm_result_list_0[0].input_signal.time_freq
+    zvals = unpack_Zvals(ssfm_result_list_0)
+
+    matrix_0 = unpack_matrix(ssfm_result_list_0, zvals, "pulse")
+    matrix_1 = unpack_matrix(ssfm_result_list_1, zvals, "pulse")
+
+
+
+    scalingFactor, letter = get_units(np.max(zvals))
+
+    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmax = np.min(
+        [int(timeFreq.number_of_points / 2 + nrange),
+         timeFreq.number_of_points - 1]
+    )
+
+    Tmin = timeFreq.t_s()[Nmin]
+    Tmax = timeFreq.t_s()[Nmax]
+
+    points_0 = np.array(
+        [timeFreq.t_s() * 1e12, get_power(matrix_0[len(zvals) - 1, Nmin:Nmax])],
+        dtype=object
+    ).T.reshape(-1, 1, 2)
+
+    points_1 = np.array(
+        [timeFreq.t_s() * 1e12, get_power(matrix_1[len(zvals) - 1, Nmin:Nmax])],
+        dtype=object
+    ).T.reshape(-1, 1, 2)
+
+
+
+    segments_0 = np.concatenate([points_0[0:-1], points_0[1:]], axis=1)
+    segments_1 = np.concatenate([points_1[0:-1], points_1[1:]], axis=1)
+
+
+
+
+    # Make custom colormap
+    colors = ["red", "gray", "blue"]
+    cmap1 = LinearSegmentedColormap.from_list("mycmap", colors)
+
+    # Initialize color normalization function
+    norm = plt.Normalize(chirpRange_GHz[0], chirpRange_GHz[1])
+
+    # Initialize line collection to be plotted
+    lc_0 = LineCollection(segments_0, cmap=cmap1, norm=norm)
+    lc_0.set_array(
+        get_chirp(timeFreq.t_s()[Nmin:Nmax],
+                  matrix_0[len(zvals) - 1, Nmin:Nmax]) / 1e9
+    )
+
+    lc_1 = LineCollection(segments_1, cmap=cmap1, norm=norm)
+    lc_1.set_array(
+        get_chirp(timeFreq.t_s()[Nmin:Nmax],
+                  matrix_1[len(zvals) - 1, Nmin:Nmax]) / 1e9
+    )
+
+
+
+    # Initialize figure
+    fig, ax = plt.subplots(nrows=2, ncols=1,dpi=300)
+    fig.patch.set_facecolor('white')
+    #fig.tight_layout()
+    line_0 = ax[0].add_collection(lc_0)
+    line_1 = ax[1].add_collection(lc_1)
+
+
+
+    fig.colorbar(line_0, ax=ax[0], label="Chirp [GHz]")
+    fig.colorbar(line_0, ax=ax[1], label="Chirp [GHz]")
+
+
+    Pmax_0 = np.max(np.abs(matrix_0)) ** 2
+    Pmax_1 = np.max(np.abs(matrix_1)) ** 2
+
+
+    Pmax=np.max(np.array([Pmax_0,Pmax_1]))
+
+    # Function for specifying axes
+
+    def init():
+
+        ax[0].set_xlim([Tmin * 1e12, Tmax * 1e12])
+        ax[0].set_ylim([0, 1.05 * Pmax])
+        ax[0].set_ylabel("Power [W]")
+        ax[0].set_xticks([])
+
+
+        ax[1].set_xlim([Tmin * 1e12, Tmax * 1e12])
+        ax[1].set_ylim([0, 1.05 * Pmax])
+        ax[1].set_xlabel("Time [ps]")
+        ax[1].set_ylabel("Power [W]")
+
+
+
+
+    # Function for updating the plot in the .gif
+
+    def update(i: int):
+        ax[0].clear()  # Clear figure
+        ax[1].clear()  # Clear figure
+
+        init()  # Reset axes  {num:{1}.{5}}  np.round(,2)
+        ax[0].set_title(f"No Raman, z = {zvals[i]/scalingFactor:.2f}{letter}m")
+        ax[1].set_title(f"Raman")
+        ax[0].set_xticks([])
+
+
+        # Make collection of points from pulse power
+        points_0 = np.array(
+            [timeFreq.t_s()[Nmin:Nmax] * 1e12, get_power(matrix_0[i, Nmin:Nmax])],
+            dtype=object
+        ).T.reshape(-1, 1, 2)
+
+        points_1 = np.array(
+            [timeFreq.t_s()[Nmin:Nmax] * 1e12, get_power(matrix_1[i, Nmin:Nmax])],
+            dtype=object
+        ).T.reshape(-1, 1, 2)
+
+
+
+        # Make collection of lines from points
+        segments_0 = np.concatenate([points_0[0:-1], points_0[1:]], axis=1)
+        lc_0 = LineCollection(segments_0, cmap=cmap1, norm=norm)
+
+        segments_1 = np.concatenate([points_1[0:-1], points_1[1:]], axis=1)
+        lc_1 = LineCollection(segments_1, cmap=cmap1, norm=norm)
+
+
+
+
+        # Activate norm function based on local chirp
+        lc_0.set_array(get_chirp(timeFreq.t_s()[Nmin:Nmax], matrix_0[i, Nmin:Nmax]) / 1e9)
+        lc_1.set_array(get_chirp(timeFreq.t_s()[Nmin:Nmax], matrix_1[i, Nmin:Nmax]) / 1e9)
+
+
+
+
+        # Plot line
+        line_0 = ax[0].add_collection(lc_0)
+        line_1 = ax[1].add_collection(lc_1)
+
+        max_index = np.argmax(get_power(matrix_1[i, Nmin:Nmax]))
+        max_power = get_power(matrix_1[i, max_index])
+        max_time = timeFreq.t_s()[max_index]*1e12
+
+
+
+
+    # Make animation
+    ani = FuncAnimation(fig, update, range(len(zvals)), init_func=init)
+    plt.show()
+
+    # Save animation as .gif
+
+    writer = PillowWriter(fps=int(framerate))
+    ani.save(
+        f"{ssfm_result_list_0[0].experiment_name}_2x1_fps={int(framerate)}.gif",
+        writer=writer)
+
+    os.chdir(ssfm_result_list_0[0].dirs[0])
+
 
 
 def get_average(time_or_freq: npt.NDArray[float],
@@ -4569,9 +5053,9 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
     N = 2 ** 14  # Number of points
-    dt = 10e-15  # Time resolution [s]
+    dt = 1.79e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1550_NM_Hz  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_1060_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(number_of_points=N,
                               time_step_s=dt,
                               center_frequency_Hz=center_freq_test)
@@ -4584,9 +5068,9 @@ if __name__ == "__main__":
 
     # Set up signal
     test_FFT_tol = 1e-2
-    test_amplitude_sqrt_W = 4.8*np.sqrt(2)
+    test_amplitude_sqrt_W = np.sqrt(50)
     test_pulse_type = "sech"
-    test_duration_s = 1e-12
+    test_duration_s = 0.1668e-12
     test_freq_offset_Hz =0
 
 
@@ -4604,10 +5088,14 @@ if __name__ == "__main__":
 
 
     alpha_test = 0#-0.22/1e3  # dB/m
-    beta_list = [0,-BETA2_AT_1550_NM_TYPICAL_SMF_S2_PER_M*1e-12]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    gamma_test = 0*1e-3  # 1/W/m
-    length_test = 5*43.47826086956521  # m
-    number_of_steps = 2**8
+    beta_list = [-0.003051721e-24,  7.29029e-5*1e-36,
+                 -1.08817e-7*1e-48, 2.8941e-10*1e-60
+                 -1.3446e-12*1e-72, 4.8348e-5*1e-84,
+                 -1.1464e-17*1e-96, 1.8802e-20*1e-108,
+                 -1.5054e-23*1e-120]#[-20456/1e30]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    gamma_test = 0.09# 1*1e-3  # 1/W/m
+    length_test = 5  # m
+    number_of_steps = 2**10
 
     fiber_test = FiberSpan(
         length_test,
@@ -4615,36 +5103,7 @@ if __name__ == "__main__":
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False)
-
+        use_self_steepening=False,
+        raman_model="agrawal")
     fiber_list = [fiber_test]
     fiber_link = FiberLink(fiber_list)
-
-
-
-    # Run SSFM
-    exp_name = f"soliton_test"
-
-
-    ssfm_result_list = SSFM(
-        fiber_link,
-        test_input_signal,
-        show_progress_flag=True,
-        experiment_name=exp_name,
-        FFT_tol=test_FFT_tol
-    )
-
-
-    nrange = 1000
-    dB_cutoff = -60
-
-
-    plot_everything_about_result(
-        ssfm_result_list,
-        nrange,
-        dB_cutoff,
-        nrange,
-        dB_cutoff,
-        show_3D_plot_flag=False)
-
-    #make_chirp_gif(ssfm_result_list, nrange,chirpRange_GHz=[-100,100])
