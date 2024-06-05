@@ -1301,7 +1301,7 @@ class FiberSpan:
     raman_in_freq_domain_func: Callable[npt.NDArray[float],npt.NDArray[complex]] = field(init=False)
     total_gainloss_dB: float = field(init=False)
     #Defaults
-    use_self_steepening: bool = False
+    use_self_steepening_flag: bool = False
     raman_model: str = "None"
     fR: float = 0.0
     tau_vib: float = 0.0
@@ -1389,6 +1389,35 @@ class FiberSpan:
         if self.describe_fiber_flag:
             self.describe_fiber()
 
+    def zero_disp_freq_distance_Hz(self, mode:str = "smallest" ):
+
+
+
+        #If first entry is zero, we are already af f_ZD
+        if float(self.beta_list[0])==0.0:
+            return 0
+
+        #If only the first entry is non-zero, we can't find ZDF
+        if self.beta_list[1:]==[0,0,0,0,0,0]:
+            return np.nan
+
+        coeff_list = np.zeros_like(beta_list)
+        for idx, beta_value in enumerate(beta_list):
+            n=idx+2
+            coeff_list[idx] = n*(n-1)*beta_value/np.math.factorial(n)
+
+        potential_ZD_freqs = np.roots(np.flip(coeff_list))/2/pi
+
+        #Discard complex roots and return
+        potential_ZD_freqs = np.real(potential_ZD_freqs[np.isreal(potential_ZD_freqs)])
+
+        if mode.lower() == "all":
+            return potential_ZD_freqs
+        else:
+            #Find smallest entry and return
+            min_idx = np.argmin(np.abs(potential_ZD_freqs))
+            return potential_ZD_freqs[min_idx]
+
     def z_m(self):
         return np.linspace(0, self.length_m, self.number_of_steps + 1)
 
@@ -1437,7 +1466,7 @@ class FiberSpan:
 
         print("\t*** Fiber nonlinear info: ***", file=d)
         print(f"\t\tFiber gamma [1/W/m] \t= {self.gamma_per_W_per_m} ", file=d)
-        print(f"\t\tFiber self steepening \t= {self.use_self_steepening} ", file=d)
+        print(f"\t\tFiber self steepening \t= {self.use_self_steepening_flag} ", file=d)
         print(f"\t\tRaman Model \t\t\t= {self.raman_model}.")
         print(f"\t\t(fR,tau_vib [fs],tau_l[fs])\t= ({self.fR:.3},{self.tau_vib/1e-15:.3},{self.tau_l/1e-15:.3})",file=d)
 
@@ -1542,7 +1571,7 @@ class FiberLink:
                 "beta7_s7_per_m",
                 "beta8_s8_per_m",
                 "alpha_dB_per_m",
-                "use_self_steepening",
+                "use_self_steepening_flag",
                 "raman_model",
                 "input_atten_dB",
                 "input_amp_dB",
@@ -1568,7 +1597,7 @@ class FiberLink:
                 fiber.beta_list[5],
                 fiber.beta_list[6],
                 fiber.alpha_dB_per_m,
-                fiber.use_self_steepening,
+                fiber.use_self_steepening_flag,
                 str(fiber.raman_model),
                 fiber.input_atten_dB,
                 fiber.input_amp_dB,
@@ -1611,7 +1640,7 @@ def load_fiber_link(path: str) -> FiberLink:
     beta7_s7_per_m = df["beta7_s7_per_m"]
     beta8_s8_per_m = df["beta8_s8_per_m"]
     alpha_dB_per_m = df["alpha_dB_per_m"]
-    use_self_steepening = df["use_self_steepening"]
+    use_self_steepening_flag = df["use_self_steepening_flag"]
     raman_model = df["raman_model"]
     input_atten_dB=df["input_atten_dB"],
     input_amp_dB=df["input_amp_dB"],
@@ -1638,7 +1667,7 @@ def load_fiber_link(path: str) -> FiberLink:
             gamma_per_W_per_m[i],
             beta_list_i,
             alpha_dB_per_m[i],
-            use_self_steepening = use_self_steepening[i],
+            use_self_steepening_flag = use_self_steepening_flag[i],
             raman_model=raman_model[i],
             input_atten_dB=input_atten_dB[0][i],
             input_amp_dB=input_amp_dB[0][i],
@@ -2891,7 +2920,7 @@ def SSFM(
         # Use simple NL model by default if Raman is ignored
 
         # TODO: sort out logic for choosing NL function
-        if fiber.use_self_steepening:
+        if fiber.use_self_steepening_flag:
 
             if str(fiber.raman_model).lower() != 'none':
                 if fiber.raman_model == 'approximate':
@@ -3551,6 +3580,7 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
     ax.plot(
         f, P_final, label=f"Final Spectrum at {zvals[-1]/scalingFactor}{prefix}m")
     ax.axvline(x=center_freq_Hz / 1e12, color="gray", alpha=0.4)
+
     ax.set_xlabel("Freq. [THz]")
     ax.set_ylabel("PSD [J/Hz]")
     ax.set_yscale("log")
@@ -3576,6 +3606,7 @@ def plot_first_and_last_spectrum(ssfm_result_list: list[SSFMResult],
     os.chdir(ssfm_result_list[0].dirs[0])
 
 
+#TODO: Make plotting of zero dispersion frequency fiber dependent.
 def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
                             nrange: int,
                             dB_cutoff: float):
@@ -3583,7 +3614,8 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     Plots spectrum calculated by SSFM as colour surface
 
     2D colour plot of spectrum in freq domain throughout entire fiber span
-    normalized to the highest peak power throughout.
+    normalized to the highest peak power throughout. If present, dashed gray
+    line indicates zero dispersion frequency.
 
     Parameters
     ----------
@@ -3613,11 +3645,16 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
 
     # Plot pulse evolution throughout fiber in normalized log scale
     os.chdir(ssfm_result_list[0].dirs[1])
+
+    first_fiber = ssfm_result_list[0].fiber
+
+
+    f_ZD_Hz=center_freq_Hz+first_fiber.zero_disp_freq_distance_Hz()
+
     fig, ax = plt.subplots(dpi=300)
 
     fig.patch.set_facecolor('white')
-    ax.set_title("Spectrum Evolution (dB scale)")
-    # Minus must be included here due to -i*omega*t sign convention
+    ax.set_title("Spectrum Evolution (dB scale).")
     f = time_freq.f_abs_Hz()[Nmin:Nmax] / 1e12
     z = zvals
     F, Z = np.meshgrid(f, z)
@@ -3628,6 +3665,10 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     Pf[Pf < dB_cutoff] = dB_cutoff
     surf = ax.contourf(F, Z, Pf, levels=40, cmap="jet")
 
+
+    ax.axvline(x=f_ZD_Hz/1e12,linestyle='--',color='gray')
+
+
     def f2wl(x):
         return freq_to_wavelength(x)/1e6
     def wl2f(x):
@@ -3636,7 +3677,7 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     ax2 = ax.secondary_xaxis("top", functions=(f2wl,wl2f))
     ax2.set_xlabel('Wavelength [$\mu$m]')
 
-    ax.set_xlabel("Freq. [THz]")
+    ax.set_xlabel(f"Freq. [THz]")
     ax.set_ylabel("Distance [m]")
     cbar = fig.colorbar(surf, ax=ax)
     save_plot("spectrum_evo_2D")
@@ -5045,7 +5086,57 @@ def plot_SNR_for_channels(
     os.chdir(ssfm_result_list[0].dirs[0])
 
 
+def distance_to_zero_dispersion_freq(fiber: FiberSpan):
+
+    beta_list=fiber.beta_list
+
+    #If first entry is zero, we are already af f_ZD
+    if float(beta_list[0])==0.0:
+        return 0
+
+
+    coeff_list = np.zeros_like(beta_list)
+    for idx, beta_value in enumerate(beta_list):
+        n=idx+2
+        coeff_list[idx] = n*(n-1)*beta_value/np.math.factorial(n)
+
+    roots = np.roots(np.flip(coeff_list))/2/pi
+    roots=np.real(roots[np.isreal(roots)])
+
+    min_idx = np.argmin(np.abs(roots))
+
+    return roots[min_idx]
+
+
+#TODO: Finish implementing this
+def plot_dispersion_graph(time_freq:TimeFreq,fiber:FiberSpan):
+
+    fc = time_freq.center_frequency_Hz
+    beta_list = fiber.beta_list
+
+    f_Hz = time_freq.f_abs_Hz()
+
+
+    coeff_list = np.zeros_like(beta_list)
+    for idx, beta_value in enumerate(beta_list):
+        n=idx+2
+        coeff_list[idx] = n*(n-1)*beta_value/np.math.factorial(n)
+
+    fig,ax=plt.subplots(dpi=300)
+    ax.plot(f_Hz/1e12,np.polyval(coeff_list, f_Hz-fc)*1e30)
+    ax.set_xlabel('freq. [THz]')
+    ax.set_ylabel('$\\beta_2$. [fs^2/m]')
+
+    ax.set_ylim((beta_list[0]+beta_list[1]*time_freq.f_min_Hz)*1e124,(beta_list[0]+beta_list[1]*time_freq.f_max_Hz)*1e124)
+
+    plt.show()
+
+
+
+
+
 if __name__ == "__main__":
+
 
     np.random.seed(123)
 
@@ -5053,7 +5144,7 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
     N = 2 ** 14  # Number of points
-    dt = 1.79e-15  # Time resolution [s]
+    dt = 1.8e-15  # Time resolution [s]
 
     center_freq_test = FREQ_1060_NM_HZ  # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(number_of_points=N,
@@ -5070,8 +5161,8 @@ if __name__ == "__main__":
     test_FFT_tol = 1e-2
     test_amplitude_sqrt_W = np.sqrt(50)
     test_pulse_type = "sech"
-    test_duration_s = 0.1668e-12
-    test_freq_offset_Hz =0
+    test_duration_s = 0.1667895841606626e-12
+    test_freq_offset_Hz = 0
 
 
     test_input_signal = InputSignal(time_freq_test,
@@ -5088,12 +5179,21 @@ if __name__ == "__main__":
 
 
     alpha_test = 0#-0.22/1e3  # dB/m
-    beta_list = [-0.003051721e-24,  7.29029e-5*1e-36,
-                 -1.08817e-7*1e-48, 2.8941e-10*1e-60
-                 -1.3446e-12*1e-72, 4.8348e-5*1e-84,
-                 -1.1464e-17*1e-96, 1.8802e-20*1e-108,
-                 -1.5054e-23*1e-120]#[-20456/1e30]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+
+
+
+    beta_list = [-3.051721e-27,
+                  7.29029e-41,
+                  -1.08817e-55,
+                  2.8940999999999862e-70,
+                  4.8348e-89,
+                  -1.1464e-113,
+                  1.8802e-128,
+                  -1.5054e-143]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+
+
     gamma_test = 0.09# 1*1e-3  # 1/W/m
+
     length_test = 5  # m
     number_of_steps = 2**10
 
@@ -5103,7 +5203,30 @@ if __name__ == "__main__":
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         raman_model="agrawal")
+
+
+
+    #assert 1==2
     fiber_list = [fiber_test]
     fiber_link = FiberLink(fiber_list)
+
+    exp_name='supercontinuum'
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=exp_name
+    )
+
+    #nrange = 1400#1600
+    dB_cutoff = -40
+
+    plot_everything_about_result(
+        ssfm_result_list,
+        dB_cutoff_pulse=dB_cutoff,
+        nrange_pulse=1400,
+        dB_cutoff_spectrum=dB_cutoff,
+        nrange_spectrum=1600,#1200,
+        show_3D_plot_flag=False)

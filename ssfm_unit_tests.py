@@ -29,7 +29,7 @@ def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
         assert np.isclose(beta_n_1,beta_n_2)
 
     assert np.isclose(fiber_1.alpha_dB_per_m , fiber_2.alpha_dB_per_m,rtol=1e-6,atol=1e-100)
-    assert fiber_1.use_self_steepening == fiber_2.use_self_steepening
+    assert fiber_1.use_self_steepening_flag == fiber_2.use_self_steepening_flag
     assert fiber_1.raman_model == fiber_2.raman_model
     assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB,rtol=1e-6,atol=1e-100)
     assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB,rtol=1e-6,atol=1e-100)
@@ -236,7 +236,7 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         describe_fiber_flag=False)
 
     fiber_list = [fiber_test]  # ,fiber_test_2
@@ -333,7 +333,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=True,
+        use_self_steepening_flag=True,
         raman_model=None,
         input_atten_dB=1,
         input_amp_dB=1.0,
@@ -349,7 +349,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         gamma_test/2,
         list(np.array(beta_list)/2),
         alpha_test/2,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         raman_model=None,
         input_atten_dB=1/2,
         input_amp_dB=1.0/2,
@@ -365,7 +365,7 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         gamma_test/3,
         list(np.array(beta_list)/3),
         alpha_test/3,
-        use_self_steepening=True,
+        use_self_steepening_flag=True,
         raman_model=None,
         input_atten_dB=1/3,
         input_amp_dB=1.0/3,
@@ -457,7 +457,7 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         describe_fiber_flag=False)
 
     fiber_list = [fiber_test]  # ,fiber_test_2
@@ -595,7 +595,7 @@ def unit_test_beta2(show_plot_flag=False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         describe_fiber_flag=False)
 
     fiber_list = [fiber_test]  # ,fiber_test_2
@@ -702,7 +702,7 @@ def unit_test_beta3(show_plot_flag=False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         describe_fiber_flag=False)
 
     fiber_list = [fiber_test]  # ,fiber_test_2
@@ -801,7 +801,7 @@ def unit_test_SPM(show_plot_flag=False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         describe_fiber_flag=False)
 
     fiber_list = [fiber_test]  # ,fiber_test_2
@@ -933,7 +933,7 @@ def unit_test_self_steepening(show_plot_flag=False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=True,
+        use_self_steepening_flag=True,
         describe_fiber_flag=False)
 
     fiber_list = [fiber_test]
@@ -1063,7 +1063,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening=False,
+        use_self_steepening_flag=False,
         describe_fiber_flag=False)
 
 
