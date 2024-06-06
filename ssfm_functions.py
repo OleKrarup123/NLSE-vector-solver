@@ -3649,7 +3649,7 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     first_fiber = ssfm_result_list[0].fiber
 
 
-    f_ZD_Hz=center_freq_Hz+first_fiber.zero_disp_freq_distance_Hz()
+    #f_ZD_Hz=center_freq_Hz+first_fiber.zero_disp_freq_distance_Hz()
 
     fig, ax = plt.subplots(dpi=300)
 
@@ -3666,7 +3666,7 @@ def plot_spectrum_matrix_2D(ssfm_result_list: list[SSFMResult],
     surf = ax.contourf(F, Z, Pf, levels=40, cmap="jet")
 
 
-    ax.axvline(x=f_ZD_Hz/1e12,linestyle='--',color='gray')
+    #ax.axvline(x=f_ZD_Hz/1e12,linestyle='--',color='gray')
 
 
     def f2wl(x):
@@ -3789,7 +3789,7 @@ def plot_everything_about_spectra(ssfm_result_list: list[SSFMResult],
 
 def make_chirp_gif(ssfm_result_list: list[SSFMResult],
                    nrange: int,
-                   chirpRange_GHz: list[float] = [-20, 20],
+                   chirp_range_Hz: list[float] = [-20e9, 20e9],
                    framerate: int = 30):
     """
     Animate pulse evolution as .gif and show local chirp
@@ -3805,7 +3805,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
         List of ssmf_result_class objects corresponding to each fiber segment.
     nrange : int
         How many points on either side of the center do we wish to plot?
-    chirpRange_GHz : list[float], optional
+    chirp_range_Hz : list[float], optional
         Min and Max frequency values in GHz to determine line
         color. The default is [-20, 20].
     framerate : int, optional
@@ -3852,13 +3852,13 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
     cmap1 = LinearSegmentedColormap.from_list("mycmap", colors)
 
     # Initialize color normalization function
-    norm = plt.Normalize(chirpRange_GHz[0], chirpRange_GHz[1])
+    norm = plt.Normalize(chirp_range_Hz[0]/1e9, chirp_range_Hz[1]/1e9)
 
     # Initialize line collection to be plotted
     lc = LineCollection(segments, cmap=cmap1, norm=norm)
     lc.set_array(
         get_chirp(time_freq.t_s()[Nmin:Nmax],
-                  matrix[len(zvals) - 1, Nmin:Nmax]) / 1e9
+                  matrix[len(zvals) - 1, Nmin:Nmax])
     )
 
     # Initialize figure
@@ -3900,7 +3900,7 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
         # Activate norm function based on local chirp
 
         lc.set_array(
-            get_chirp(time_freq.t_s()[Nmin:Nmax], matrix[i, Nmin:Nmax]) / 1e9)
+            get_chirp(time_freq.t_s()[Nmin:Nmax], matrix[i, Nmin:Nmax]) )
         # Plot line
         line = ax.add_collection(lc)
 
@@ -3918,9 +3918,10 @@ def make_chirp_gif(ssfm_result_list: list[SSFMResult],
     os.chdir(ssfm_result_list[0].dirs[0])
 
 
-def make_chirp_gif_2x1(ssfm_result_list_list: list[list[SSFMResult]],
+def make_chirp_gif_2x2(ssfm_result_list_list: list[list[SSFMResult]],
+                       title_list: list[str],
                    nrange: int,
-                   chirpRange_GHz: list[float] = [-20, 20],
+                   chirp_range_Hz: list[float] = [-20e9, 20e9],
                    framerate: int = 30):
     """
     Animate pulse evolution as .gif and show local chirp
@@ -3936,7 +3937,255 @@ def make_chirp_gif_2x1(ssfm_result_list_list: list[list[SSFMResult]],
         List of list of ssmf_result_class objects corresponding to each fiber segment.
     nrange : int
         How many points on either side of the center do we wish to plot?
-    chirpRange_GHz : list[float], optional
+    chirp_range_Hz : list[float], optional
+        Min and Max frequency values in GHz to determine line
+        color. The default is [-20, 20].
+    framerate : int, optional
+        Framerate of .gif animation. May want to reduce this number for
+        simulations with few steps. The default is 30.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    print(
+        "Making .gif anination of pulse evolution. This may "
+        "take a while, so please be patient."
+    )
+
+
+    ssfm_result_list_0=ssfm_result_list_list[0]
+    ssfm_result_list_1=ssfm_result_list_list[1]
+    ssfm_result_list_2=ssfm_result_list_list[2]
+    ssfm_result_list_3=ssfm_result_list_list[3]
+
+    os.chdir(ssfm_result_list_0[0].dirs[1])
+    print(f"The .gif animation will be saved in {os.getcwd()}")
+
+
+    timeFreq = ssfm_result_list_0[0].input_signal.time_freq
+    zvals = unpack_Zvals(ssfm_result_list_0)
+
+    matrix_0 = unpack_matrix(ssfm_result_list_0, zvals, "pulse")
+    matrix_1 = unpack_matrix(ssfm_result_list_1, zvals, "pulse")
+    matrix_2 = unpack_matrix(ssfm_result_list_2, zvals, "pulse")
+    matrix_3 = unpack_matrix(ssfm_result_list_3, zvals, "pulse")
+
+
+    scalingFactor, letter = get_units(np.max(zvals))
+
+    Nmin = np.max([int(timeFreq.number_of_points / 2 - nrange), 0])
+    Nmax = np.min(
+        [int(timeFreq.number_of_points / 2 + nrange),
+         timeFreq.number_of_points - 1]
+    )
+
+    Tmin = timeFreq.t_s()[Nmin]
+    Tmax = timeFreq.t_s()[Nmax]
+
+    points_0 = np.array(
+        [timeFreq.t_s() * 1e12, get_power(matrix_0[len(zvals) - 1, Nmin:Nmax])],
+        dtype=object
+    ).T.reshape(-1, 1, 2)
+
+    points_1 = np.array(
+        [timeFreq.t_s() * 1e12, get_power(matrix_1[len(zvals) - 1, Nmin:Nmax])],
+        dtype=object
+    ).T.reshape(-1, 1, 2)
+    points_2 = np.array(
+        [timeFreq.t_s() * 1e12, get_power(matrix_2[len(zvals) - 1, Nmin:Nmax])],
+        dtype=object
+    ).T.reshape(-1, 1, 2)
+    points_3 = np.array(
+        [timeFreq.t_s() * 1e12, get_power(matrix_3[len(zvals) - 1, Nmin:Nmax])],
+        dtype=object
+    ).T.reshape(-1, 1, 2)
+
+
+    segments_0 = np.concatenate([points_0[0:-1], points_0[1:]], axis=1)
+    segments_1 = np.concatenate([points_1[0:-1], points_1[1:]], axis=1)
+    segments_2 = np.concatenate([points_2[0:-1], points_2[1:]], axis=1)
+    segments_3 = np.concatenate([points_3[0:-1], points_3[1:]], axis=1)
+
+
+
+    # Make custom colormap
+    colors = ["red", "gray", "blue"]
+    cmap1 = LinearSegmentedColormap.from_list("mycmap", colors)
+
+    # Initialize color normalization function
+    norm = plt.Normalize(chirp_range_Hz[0]/1e9, chirp_range_Hz[1]/1e9)
+
+    # Initialize line collection to be plotted
+    lc_0 = LineCollection(segments_0, cmap=cmap1, norm=norm)
+    lc_0.set_array(
+        get_chirp(timeFreq.t_s()[Nmin:Nmax],
+                  matrix_0[len(zvals) - 1, Nmin:Nmax])
+    )
+
+    lc_1 = LineCollection(segments_1, cmap=cmap1, norm=norm)
+    lc_1.set_array(
+        get_chirp(timeFreq.t_s()[Nmin:Nmax],
+                  matrix_1[len(zvals) - 1, Nmin:Nmax])
+    )
+
+    lc_2 = LineCollection(segments_2, cmap=cmap1, norm=norm)
+    lc_2.set_array(
+        get_chirp(timeFreq.t_s()[Nmin:Nmax],
+                  matrix_2[len(zvals) - 1, Nmin:Nmax])
+    )
+
+    lc_3 = LineCollection(segments_3, cmap=cmap1, norm=norm)
+    lc_3.set_array(
+        get_chirp(timeFreq.t_s()[Nmin:Nmax],
+                  matrix_3[len(zvals) - 1, Nmin:Nmax])
+    )
+
+    # Initialize figure
+    fig, ax = plt.subplots(nrows=2, ncols=2,dpi=300)
+    fig.patch.set_facecolor('white')
+    line_0 = ax[0,0].add_collection(lc_0)
+    line_1 = ax[0,1].add_collection(lc_1)
+
+    line_2 = ax[1,0].add_collection(lc_2)
+    line_3 = ax[1,1].add_collection(lc_3)
+
+    fig.colorbar(line_0, ax=ax[0,1], label="Chirp [GHz]")
+    fig.colorbar(line_0, ax=ax[1,1], label="Chirp [GHz]")
+
+    fig.tight_layout()
+
+    Pmax_0 = np.max(np.abs(matrix_0)) ** 2
+    Pmax_1 = np.max(np.abs(matrix_1)) ** 2
+    Pmax_2 = np.max(np.abs(matrix_2)) ** 2
+    Pmax_3 = np.max(np.abs(matrix_3)) ** 2
+
+    Pmax=np.max(np.array([Pmax_0,Pmax_1,Pmax_2,Pmax_3]))
+
+    # Function for specifying axes
+
+    def init():
+        fig.tight_layout()
+
+        ax[0,0].set_xlim([Tmin * 1e12, Tmax * 1e12])
+        ax[0,0].set_ylim([0, 1.05 * Pmax])
+        ax[0,0].set_ylabel("Power [W]")
+
+        ax[0,1].set_xlim([Tmin * 1e12, Tmax * 1e12])
+        ax[0,1].set_ylim([0, 1.05 * Pmax])
+
+        ax[1,0].set_xlim([Tmin * 1e12, Tmax * 1e12])
+        ax[1,0].set_ylim([0, 1.05 * Pmax])
+        ax[1,0].set_xlabel("Time [ps]")
+        ax[1,0].set_ylabel("Power [W]")
+
+        ax[1,1].set_xlim([Tmin * 1e12, Tmax * 1e12])
+        ax[1,1].set_ylim([0, 1.05 * Pmax])
+        ax[1,1].set_xlabel("Time [ps]")
+
+
+    # Function for updating the plot in the .gif
+
+    def update(i: int):
+        ax[0,0].clear()  # Clear figure
+        ax[0,1].clear()  # Clear figure
+        ax[1,0].clear()  # Clear figure
+        ax[1,1].clear()  # Clear figure
+
+        init()  # Reset axes  {num:{1}.{5}}  np.round(,2)
+        ax[0,0].set_title(f"{title_list[0]}, z = {zvals[i]/scalingFactor:.2f}{letter}m")
+        ax[0,1].set_title(f"{title_list[1]}")
+        ax[1,0].set_title(f"{title_list[2]}")
+        ax[1,1].set_title(f"{title_list[3]}")
+
+
+        # Make collection of points from pulse power
+        points_0 = np.array(
+            [timeFreq.t_s()[Nmin:Nmax] * 1e12, get_power(matrix_0[i, Nmin:Nmax])],
+            dtype=object
+        ).T.reshape(-1, 1, 2)
+
+        points_1 = np.array(
+            [timeFreq.t_s()[Nmin:Nmax] * 1e12, get_power(matrix_1[i, Nmin:Nmax])],
+            dtype=object
+        ).T.reshape(-1, 1, 2)
+
+        points_2 = np.array(
+            [timeFreq.t_s()[Nmin:Nmax] * 1e12, get_power(matrix_2[i, Nmin:Nmax])],
+            dtype=object
+        ).T.reshape(-1, 1, 2)
+
+        points_3 = np.array(
+            [timeFreq.t_s()[Nmin:Nmax] * 1e12, get_power(matrix_3[i, Nmin:Nmax])],
+            dtype=object
+        ).T.reshape(-1, 1, 2)
+
+        # Make collection of lines from points
+        segments_0 = np.concatenate([points_0[0:-1], points_0[1:]], axis=1)
+        lc_0 = LineCollection(segments_0, cmap=cmap1, norm=norm)
+
+        segments_1 = np.concatenate([points_1[0:-1], points_1[1:]], axis=1)
+        lc_1 = LineCollection(segments_1, cmap=cmap1, norm=norm)
+
+        segments_2 = np.concatenate([points_2[0:-1], points_2[1:]], axis=1)
+        lc_2 = LineCollection(segments_2, cmap=cmap1, norm=norm)
+
+        segments_3 = np.concatenate([points_3[0:-1], points_3[1:]], axis=1)
+        lc_3 = LineCollection(segments_3, cmap=cmap1, norm=norm)
+
+
+        # Activate norm function based on local chirp
+        lc_0.set_array(get_chirp(timeFreq.t_s()[Nmin:Nmax], matrix_0[i, Nmin:Nmax])/1e9 )
+        lc_1.set_array(get_chirp(timeFreq.t_s()[Nmin:Nmax], matrix_1[i, Nmin:Nmax])/1e9 )
+        lc_2.set_array(get_chirp(timeFreq.t_s()[Nmin:Nmax], matrix_2[i, Nmin:Nmax])/1e9 )
+        lc_3.set_array(get_chirp(timeFreq.t_s()[Nmin:Nmax], matrix_3[i, Nmin:Nmax])/1e9 )
+
+
+
+        # Plot line
+        line_0 = ax[0,0].add_collection(lc_0)
+        line_1 = ax[0,1].add_collection(lc_1)
+        line_2 = ax[1,0].add_collection(lc_2)
+        line_3 = ax[1,1].add_collection(lc_3)
+        fig.tight_layout()
+
+
+    # Make animation
+    ani = FuncAnimation(fig, update, range(len(zvals)), init_func=init)
+    plt.show()
+
+    # Save animation as .gif
+
+    writer = PillowWriter(fps=int(framerate))
+
+    ani.save(
+        f"{ssfm_result_list_0[0].experiment_name}_2x2_fps={int(framerate)}.gif",
+        writer=writer)
+
+    os.chdir(ssfm_result_list_0[0].dirs[0])
+
+
+def make_chirp_gif_2x1(ssfm_result_list_list: list[list[SSFMResult]],
+                   nrange: int,
+                   chirp_range_Hz: list[float] = [-20, 20],
+                   framerate: int = 30):
+    """
+    Animate pulse evolution as .gif and show local chirp
+
+    Animate pulse power evolution and show local chirp by changing line color.
+    Saves result as .gif file.
+    Note: Producing the animation can take a several minutes on a regular
+    PC, so please be patient.
+
+    Parameters
+    ----------
+    ssfm_result_list_list : list[list[SSFMResult]]
+        List of list of ssmf_result_class objects corresponding to each fiber segment.
+    nrange : int
+        How many points on either side of the center do we wish to plot?
+    chirp_range_Hz : list[float], optional
         Min and Max frequency values in GHz to determine line
         color. The default is [-20, 20].
     framerate : int, optional
@@ -4005,7 +4254,7 @@ def make_chirp_gif_2x1(ssfm_result_list_list: list[list[SSFMResult]],
     cmap1 = LinearSegmentedColormap.from_list("mycmap", colors)
 
     # Initialize color normalization function
-    norm = plt.Normalize(chirpRange_GHz[0], chirpRange_GHz[1])
+    norm = plt.Normalize(chirp_range_Hz[0], chirp_range_Hz[1])
 
     # Initialize line collection to be plotted
     lc_0 = LineCollection(segments_0, cmap=cmap1, norm=norm)
@@ -5182,22 +5431,51 @@ if __name__ == "__main__":
 
 
 
-    beta_list = [-3.051721e-27,
-                  7.29029e-41,
-                  -1.08817e-55,
-                  2.8940999999999862e-70,
-                  4.8348e-89,
-                  -1.1464e-113,
-                  1.8802e-128,
-                  -1.5054e-143]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    # beta_list = [-3.051721e-27,
+    #               7.29029e-41,
+    #               -1.08817e-55,
+    #               2.8940999999999862e-70,
+    #               4.8348e-89,
+    #               -1.1464e-113,
+    #               1.8802e-128,
+    #               -1.5054e-143]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
 
+
+    beta_list = [-3.051721e-27]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+    beta_list_TOD = [-3.051721e-27,-7.29029e-41]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
 
     gamma_test = 0.09# 1*1e-3  # 1/W/m
 
     length_test = 5  # m
     number_of_steps = 2**10
 
-    fiber_test = FiberSpan(
+    fiber_test_base = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening_flag=False,
+        raman_model="none")
+
+    fiber_list_base = [fiber_test_base]
+    fiber_link_base = FiberLink(fiber_list_base)
+
+
+    fiber_test_TOD = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list_TOD,
+        alpha_test,
+        use_self_steepening_flag=False,
+        raman_model="none")
+
+    fiber_list_TOD = [fiber_test_TOD]
+    fiber_link_TOD = FiberLink(fiber_list_TOD)
+
+
+    fiber_test_Raman = FiberSpan(
         length_test,
         number_of_steps,
         gamma_test,
@@ -5205,28 +5483,72 @@ if __name__ == "__main__":
         alpha_test,
         use_self_steepening_flag=False,
         raman_model="agrawal")
+    fiber_list_Raman = [fiber_test_Raman]
+    fiber_link_Raman = FiberLink(fiber_list_Raman)
 
+    fiber_test_SS = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening_flag=True,
+        raman_model="none")
 
+    fiber_list_SS = [fiber_test_SS]
+    fiber_link_SS = FiberLink(fiber_list_SS)
 
-    #assert 1==2
-    fiber_list = [fiber_test]
-    fiber_link = FiberLink(fiber_list)
+    exp_name='Soliton_fission'
 
-    exp_name='supercontinuum'
-    ssfm_result_list = SSFM(
-        fiber_link,
+    # ssfm_result_list_base = SSFM(
+    #     fiber_link_base,
+    #     test_input_signal,
+    #     show_progress_flag=True,
+    #     experiment_name=exp_name
+    # )
+
+    ssfm_result_list_TOD = SSFM(
+        fiber_link_TOD,
         test_input_signal,
         show_progress_flag=True,
         experiment_name=exp_name
     )
 
-    #nrange = 1400#1600
+    plot_pulse_matrix_2D(ssfm_result_list_TOD, 1400, -40)
+    plot_spectrum_matrix_2D(ssfm_result_list_TOD, 1600, -40)
+    assert 1==2
+
+    ssfm_result_list_Raman = SSFM(
+        fiber_link_Raman,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=exp_name
+    )
+
+    ssfm_result_list_SS = SSFM(
+        fiber_link_SS,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=exp_name
+    )
+
+    #nrange = 1400#
     dB_cutoff = -40
 
-    plot_everything_about_result(
-        ssfm_result_list,
-        dB_cutoff_pulse=dB_cutoff,
-        nrange_pulse=1400,
-        dB_cutoff_spectrum=dB_cutoff,
-        nrange_spectrum=1600,#1200,
-        show_3D_plot_flag=False)
+
+    ssmf_result_list_list = [ssfm_result_list_base,
+                             ssfm_result_list_TOD,
+                             ssfm_result_list_Raman,
+                             ssfm_result_list_SS]
+
+    #make_chirp_gif(ssfm_result_list_TOD, 1600)
+    make_chirp_gif_2x2(ssfm_result_list_list=ssmf_result_list_list,
+                       title_list= ['Soliton','$\\beta_3>0$','Raman','Self-Steepening'],
+                       nrange=350)
+    # plot_everything_about_result(
+    #     ssfm_result_list,
+    #     dB_cutoff_pulse=dB_cutoff,
+    #     nrange_pulse=1400,
+    #     dB_cutoff_spectrum=dB_cutoff,
+    #     nrange_spectrum=1600,#1200,
+    #     show_3D_plot_flag=False)
