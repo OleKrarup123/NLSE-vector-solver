@@ -34,9 +34,12 @@ def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
     assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB,rtol=1e-6,atol=1e-100)
     assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB,rtol=1e-6,atol=1e-100)
     assert np.isclose(fiber_1.input_atten_dB , fiber_2.input_atten_dB,rtol=1e-6,atol=1e-100)
+    assert np.isclose(fiber_1.input_disp_comp_s2 , fiber_2.input_disp_comp_s2,rtol=1e-6,atol=1e-100)
+
     assert np.isclose(fiber_1.output_amp_dB , fiber_2.output_amp_dB,rtol=1e-6,atol=1e-100)
     assert np.isclose(fiber_1.output_noise_factor_dB , fiber_2.output_noise_factor_dB,rtol=1e-6,atol=1e-100)
     assert np.isclose(fiber_1.output_atten_dB , fiber_2.output_atten_dB,rtol=1e-6,atol=1e-100)
+    assert np.isclose(fiber_1.output_disp_comp_s2 , fiber_2.output_disp_comp_s2,rtol=1e-6,atol=1e-100)
 
     return True
 
@@ -165,26 +168,9 @@ def self_steepening_pulse(time_freq: TimeFreq,
 
 
 
-def run_all_unit_tests(show_plot_flag = False):
 
 
-    print("  ")
-    print("Running all unit tests !!! ")
-    print("  ")
 
-    unit_tests_saveload(show_plot_flag=show_plot_flag)
-    unit_tests_dispersion(show_plot_flag=show_plot_flag)
-    unit_tests_nonlinear(show_plot_flag=show_plot_flag)
-
-    print("  ")
-    print("All unit tests succeeded!!! ")
-    print("  ")
-
-def unit_tests_saveload(show_plot_flag = False):
-
-    unit_test_saveload_FiberLink(show_plot_flag =show_plot_flag)
-    unit_test_saveload_TimeFreq(show_plot_flag =show_plot_flag)
-    unit_test_saveload_InputSignal(show_plot_flag =show_plot_flag)
 
 
 def unit_test_saveload_TimeFreq(show_plot_flag = False):
@@ -338,9 +324,11 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         input_atten_dB=1,
         input_amp_dB=1.0,
         input_noise_factor_dB=-10,
+        input_disp_comp_s2=-0.5*beta_list[0]*length_test*0.5,
         output_atten_dB=1.0,
         output_amp_dB=24,
         output_noise_factor_dB=-10,
+        output_disp_comp_s2=-0.5*beta_list[0]*length_test*0.5,
         describe_fiber_flag=False)
 
     fiber_test_2 = FiberSpan(
@@ -542,10 +530,7 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
 
 
 
-def unit_tests_dispersion(show_plot_flag=False):
 
-    unit_test_beta2(show_plot_flag=show_plot_flag)
-    unit_test_beta3(show_plot_flag=show_plot_flag)
 
 def unit_test_beta2(show_plot_flag=False):
     """
@@ -763,10 +748,7 @@ def unit_test_beta3(show_plot_flag=False):
     print("  ")
 
 
-def unit_tests_nonlinear(show_plot_flag=False):
-    unit_test_SPM(show_plot_flag)
-    unit_test_self_steepening(show_plot_flag)
-    unit_test_photon_number_conservation_no_raman(show_plot_flag)
+
 
 def unit_test_SPM(show_plot_flag=False):
     print("  ")
@@ -1042,7 +1024,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
     time_freq_test = TimeFreq(N,
                               dt,
                               center_freq_test,
-                              describe_time_freq_flag=False)
+                              describe_time_freq_flag=show_plot_flag)
 
     # Set up signal
     test_FFT_tol = 1e-3
@@ -1078,7 +1060,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
                                     test_amplitude,
                                     test_pulse_type,
                                     FFT_tol=test_FFT_tol,
-                                    describe_input_signal_flag=False)
+                                    describe_input_signal_flag=show_plot_flag)
 
     f = -time_freq_test.f_rel_Hz()+center_freq_test
 
@@ -1093,7 +1075,7 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
     ssfm_result_list = SSFM(
         fiber_link,
         test_input_signal,
-        show_progress_flag=False,
+        show_progress_flag=show_plot_flag,
         experiment_name=exp_name    )
 
     final_photon_number = get_photon_number(f,
@@ -1108,6 +1090,151 @@ def unit_test_photon_number_conservation_no_raman(show_plot_flag=False):
     print("  ")
 
 
+
+def ssfm_with_everything(show_plot_flag = False):
+
+    print("  ")
+    print("Doing unit test for everything!")
+
+    reference_energy_J = 1.1544135015147303e-11
+
+    np.random.seed(123)
+
+
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+    os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+    N = 2 ** 14  # Number of points
+    dt = 1.8e-15  # Time resolution [s]
+
+    center_freq_test = FREQ_1060_NM_HZ  # FREQ_CENTER_C_BAND_HZ
+    time_freq_test = TimeFreq(number_of_points=N,
+                              time_step_s=dt,
+                              center_frequency_Hz=center_freq_test)
+
+
+
+
+
+
+
+    # Set up signal
+    test_FFT_tol = 1e-2
+    test_amplitude_sqrt_W = np.sqrt(50)
+    test_pulse_type = "sech"
+    test_duration_s = 0.1667895841606626e-12
+    test_freq_offset_Hz = 0
+
+
+    test_input_signal = InputSignal(time_freq_test,
+                                    test_duration_s,
+                                    test_amplitude_sqrt_W,
+                                    test_pulse_type,
+                                    freq_offset_Hz=test_freq_offset_Hz,
+                                    FFT_tol=test_FFT_tol)
+
+
+
+
+
+
+
+    alpha_test = -0.3#-0.22/1e3  # dB/m
+
+
+
+    beta_list = [-3.051721e-27,
+                  7.29029e-41,
+                  -1.08817e-55,
+                  2.8940999999999862e-70,
+                  4.8348e-89,
+                  -1.1464e-113,
+                  1.8802e-128,
+                  -1.5054e-143]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
+
+
+    gamma_test = 0.09# 1*1e-3  # 1/W/m
+
+    length_test = 5  # m
+    number_of_steps = 2**10
+
+    fiber_test = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening_flag=True,
+        raman_model="agrawal")
+
+
+
+    #assert 1==2
+    fiber_list = [fiber_test]
+    fiber_link = FiberLink(fiber_list)
+
+    exp_name='all_effects_unit_test'
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=exp_name
+    )
+
+    final_energy_J = get_energy(time_freq_test.t_s(), ssfm_result_list[0].pulse_matrix[-1,:])
+
+    test_passed_flag = np.isclose(final_energy_J ,
+                      reference_energy_J,
+                      rtol=4e-8,
+                      atol=1e-100)
+
+    if test_passed_flag:
+        print("Unit test for all effects SUCCEEDED!")
+        return test_passed_flag
+
+    else:
+        print(f"""ERROR: {final_energy_J = } but {reference_energy_J = }!""")
+        return False
+
+
+def unit_tests_saveload(show_plot_flag = False):
+
+    unit_test_saveload_FiberLink(show_plot_flag =show_plot_flag)
+    unit_test_saveload_TimeFreq(show_plot_flag =show_plot_flag)
+    unit_test_saveload_InputSignal(show_plot_flag =show_plot_flag)
+
+def unit_tests_dispersion(show_plot_flag=False):
+
+
+    unit_test_beta2(show_plot_flag=show_plot_flag)
+    unit_test_beta3(show_plot_flag=show_plot_flag)
+
+
+def unit_tests_nonlinear(show_plot_flag=False):
+    unit_test_SPM(show_plot_flag)
+    unit_test_self_steepening(show_plot_flag)
+    unit_test_photon_number_conservation_no_raman(show_plot_flag)
+
+def run_all_unit_tests(show_plot_flag = False):
+
+
+    print("  ")
+    print("Running all unit tests !!! ")
+    print("  ")
+    unit_tests_saveload(show_plot_flag=show_plot_flag)
+    all_effects_test_flag = ssfm_with_everything(show_plot_flag=show_plot_flag)
+
+    if not all_effects_test_flag:
+        unit_tests_dispersion(show_plot_flag=show_plot_flag)
+        print("Tests of dispersion succeeded!")
+        unit_tests_nonlinear(show_plot_flag=show_plot_flag)
+        print("Tests of nonlinear effects succeeded!")
+        print("Something not covered by present tests must be wrong!")
+
+    else:
+        print("  ")
+        print("All unit tests succeeded!!! ")
+        print("  ")
 
 if __name__ == "__main__":
     run_all_unit_tests(show_plot_flag=False)
