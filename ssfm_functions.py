@@ -15,13 +15,15 @@ Created on Fri Jan 26 14:26:22 2024
 #
 #   int f(t)exp(+1j*w*t) dt.
 #
-# This ensures that f(t)=exp(-1j*2*t) correctly creates a delta function
+# This ensures that f(t)=exp(-1j*2*t) correFctly creates a delta function
 # at w=+2.
 #
 from time import time
 import pandas as pd
 from copy import deepcopy
 import os
+import json
+
 from dataclasses import dataclass, field
 from typing import TextIO, Callable
 from datetime import datetime
@@ -36,6 +38,8 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.legend import LineCollection
 from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib import rcParams
+
+
 rcParams['figure.dpi'] = 300
 rcParams['axes.spines.top'] = False
 rcParams['axes.spines.right'] = False
@@ -79,6 +83,18 @@ PULSE_TYPE_LIST = ["random",
                    "CW",
                    "custom"]
 
+
+BPSK = np.array([-1.0,1.0])
+QAM4 = np.sqrt(1/2)*np.array( [1+1j,-1+1j,-1-1j,1-1j]  )#
+QAM16 = np.sqrt(1/2)*np.array( [ 1+1j,1/3+1j,1+1/3*1j,1/3*(1+1j),
+                                -1+1j,-1/3+1j,-1+1/3*1j,1/3*(-1+1j),
+                                -1-1j,-1/3-1j,-1-1/3*1j,-1/3*(1+1j),
+                                1-1j,1/3-1j,1-1/3*1j,1/3*(1-1j)]  )
+
+QAM64 = np.sqrt(1/2)*np.array([ 1+1j, 5/7+1j,3/7+1j, 1/7+1j, 1+1j*5/7, 5/7+1j*5/7,3/7+1j*5/7, 1/7+1j*5/7,1+1j*3/7, 5/7+1j*3/7,3/7+1j*3/7, 1/7+1j*3/7,1+1j*1/7, 5/7+1j*1/7,3/7+1j*1/7, 1/7+1j*1/7   ,
+                               -1+1j, -5/7+1j,-3/7+1j, -1/7+1j, -1+1j*5/7, -5/7+1j*5/7,-3/7+1j*5/7, -1/7+1j*5/7,-1+1j*3/7, -5/7+1j*3/7,-3/7+1j*3/7, -1/7+1j*3/7,-1+1j*1/7, -5/7+1j*1/7,-3/7+1j*1/7, -1/7+1j*1/7   ,
+                               1-1j, 5/7-1j,3/7-1j, 1/7-1j, 1-1j*5/7, 5/7-1j*5/7,3/7-1j*5/7, 1/7-1j*5/7,1-1j*3/7, 5/7-1j*3/7,3/7-1j*3/7, 1/7-1j*3/7,1-1j*1/7, 5/7-1j*1/7,3/7-1j*1/7, 1/7-1j*1/7   ,
+                               -1-1j, -5/7-1j,-3/7-1j, -1/7-1j, -1-1j*5/7, -5/7-1j*5/7,-3/7-1j*5/7, -1/7-1j*5/7,-1-1j*3/7, -5/7-1j*3/7,-3/7-1j*3/7, -1/7-1j*3/7,-1-1j*1/7, -5/7-1j*1/7,-3/7-1j*1/7, -1/7-1j*1/7   ])
 
 def get_freq_range_from_time(time_s: npt.NDArray[float]
                              ) -> npt.NDArray[float]:
@@ -304,12 +320,12 @@ class Channel:
 
     """
 
-    channel_center_freq_Hz: float
     channel_min_freq_Hz: float
     channel_max_freq_Hz: float
     signal_center_freq_Hz: float
     signal_bw_Hz: float
 
+    channel_center_freq_Hz: float = field(init=False)
     channel_width_Hz: float = field(init=False)
     signal_min_freq_Hz: float = field(init=False)
     signal_max_freq_Hz: float = field(init=False)
@@ -360,7 +376,7 @@ class Channel:
         None.
 
         """
-
+        self.channel_center_freq_Hz = (self.channel_max_freq_Hz+self.channel_min_freq_Hz)/2
         # Quick sanity check that center frequency is between min and max
         assert (
             self.channel_min_freq_Hz < self.channel_max_freq_Hz
@@ -617,7 +633,7 @@ def load_TimeFreq(path: str) -> TimeFreq:
 
     """
     path_to_saved_timeFreq = os.path.join(path)
-    df = pd.read_csv(path_to_saved_timeFreq + "\\input_info\\timeFreq.csv")
+    df = pd.read_csv( os.path.join(path_to_saved_timeFreq,'input_info','timeFreq.csv') )
     number_of_points = df["number_of_points"]
     time_step_s = df["time_step_s"]
     center_frequency_Hz = df["center_frequency_Hz"]
@@ -626,6 +642,41 @@ def load_TimeFreq(path: str) -> TimeFreq:
                     time_step_s[0],
                     center_frequency_Hz[0])
 
+
+
+def get_real_field(field_in_time_or_freq_domain: npt.NDArray[complex]
+              ) -> npt.NDArray[float]:
+    """
+    In optics and many other branches of physics and engineering, the waves
+    that actually describe various phenomena are given by
+
+    A_real = A_0 * cos(beta*z-w*t+phi)
+
+    However, accounting for phase shifts and interference is a lot easier if
+    we instead use
+
+    A_complex = |A_0|*exp(i[beta*z-w*t+phi]),
+
+    where
+
+    A_real = 0.5*(A_complex+ cc{A_complex}) = real{A_complex}.
+
+
+
+    Parameters
+    ----------
+    field_in_time_or_freq_domain : npt.NDArray[complex]
+        Complex temporal or spectral field.
+
+    Returns
+    -------
+    real_field: npt.NDArray[float]
+        Real temporal or spectral field
+
+    """
+
+
+    return np.real(field_in_time_or_freq_domain)
 
 def get_power(field_in_time_or_freq_domain: npt.NDArray[complex]
               ) -> npt.NDArray[float]:
@@ -1735,7 +1786,7 @@ def load_fiber_link(path: str) -> FiberLink:
 
     """
 
-    df = pd.read_csv(path + "input_info\\fiber_link.csv")
+    df = pd.read_csv( os.path.join(path,'input_info','fiber_link.csv') )
     length_m = df["length_m"]
     number_of_steps = df["number_of_steps"]
     gamma_per_W_per_m = df["gamma_per_W_per_m"]
@@ -1934,15 +1985,15 @@ class InputSignal:
         scaling_factor, prefix = get_units(self.time_freq.f_rel_Hz()[-1])
         fig, ax = plt.subplots()
         ax.set_title(f'Input signal for {self.pulse_type} in freq domain')
-        ax.plot(-self.time_freq.f_rel_Hz()/scaling_factor,
+        ax.plot(self.time_freq.f_rel_Hz()/scaling_factor,
                 get_power(self.spectrum_field), '.')
         ax.set_xlabel(f'Freq [{prefix}Hz]')
         ax.set_ylabel('Energy dens. [J/Hz]')
 
 
         ax.set_yscale('log')
-        ax.set_xlim(-6/self.duration_s/scaling_factor,
-                    6/self.duration_s/scaling_factor)
+        # ax.set_xlim(-6/self.duration_s/scaling_factor,
+        #             6/self.duration_s/scaling_factor)
         max_power = np.max(get_power(self.spectrum_field))
         ax.set_ylim(1e-12*max_power, 2*max_power)
 
@@ -2111,6 +2162,7 @@ class SSFMResult:
         self,
         input_signal: InputSignal,
         fiber: FiberSpan,
+        run_time_s:float,
         experiment_name: str,
         directories: str,
     ):
@@ -2126,6 +2178,7 @@ class SSFMResult:
         """
         self.input_signal = input_signal
         self.fiber = fiber
+        self.run_time_s = run_time_s
         self.experiment_name = experiment_name
         self.dirs = directories
 
@@ -2278,10 +2331,10 @@ def describe_sim_parameters(
         ax.barh("Fiber Length", fiber.length_m / scaling_factor, color="C0")
         ax.axvline(x=fiber.length_m / scaling_factor, color="C0")
 
-        if fiber.alpha_Np_per_m > 0:
+        if fiber.alpha_Np_per_m != 0.0:
             ax.barh("Effective Length", L_eff / scaling_factor, color="C1")
-    Length_disp_array = np.ones_like(fiber.beta_list) * 1.0e100
 
+    Length_disp_array = np.ones_like(fiber.beta_list) * 1.0e100
     for idx_beta, beta_n in enumerate(fiber.beta_list):
         n = idx_beta + 2
         if beta_n != 0.0:
@@ -2327,7 +2380,7 @@ def describe_sim_parameters(
 
         if str(fiber.raman_model).lower() != "none":
             t=input_signal.time_freq.t_s()
-            refractive_index = 1.47
+            refractive_index = 1.47 #Note that g_Raman and thus L_Raman depend on the refractive index. These will typically be in the range from 1.2 to 2 for most "normal" materials, so we use the value for silica of 1.47.
             hr_imag_max=np.max(np.imag(get_spectrum_from_pulse( t,
                                                                fiber.raman_in_time_domain_func(t),
                                                                FFT_tol = input_signal.FFT_tol  )))
@@ -2556,25 +2609,24 @@ def create_output_directory(experiment_name: str) -> [(str, str), datetime]:
 
     """
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
-    base_dir = os.getcwd() + "\\"
+    base_dir = os.getcwd()
     os.chdir(base_dir)
 
     current_dir = ""
     current_time = datetime.now()
 
     if experiment_name == "most_recent_run":
-        current_dir = base_dir + "most_recent_run\\"
+        current_dir = os.path.join(base_dir,'most_recent_run')
         overwrite_folder_flag = True
     else:
 
-        current_dir = (
-            base_dir
-            + "Simulation Results\\" +
-            f"{experiment_name}\\"
-            f"{current_time.year}_{current_time.month}_{current_time.day}_" +
-            f"{current_time.hour}_{current_time.minute}_" +
-            f"{current_time.second}\\"
-        )
+        current_dir = os.path.join(base_dir,
+                    "Simulation Results" ,
+                    f"{experiment_name}",
+                    f"{current_time.year}_{current_time.month}_{current_time.day}_" +
+                    f"{current_time.hour}_{current_time.minute}_" +
+                    f"{current_time.second}")
+
         overwrite_folder_flag = False
     os.makedirs(current_dir, exist_ok=overwrite_folder_flag)
     os.chdir(current_dir)
@@ -2585,7 +2637,7 @@ def create_output_directory(experiment_name: str) -> [(str, str), datetime]:
     return (base_dir, current_dir), current_time
 
 
-def load_previous_run(basePath: str) -> [FiberLink, InputSignal]:
+def load_previous_run(base_path: str) -> [FiberLink, InputSignal]:
     """
     Loads all relevant info about previous run
 
@@ -2594,7 +2646,7 @@ def load_previous_run(basePath: str) -> [FiberLink, InputSignal]:
     Use the stored values to reconstruct the parameters for the run.
 
     Parameters:
-        basePath (str): Path to run folder
+        base_path (str): Path to run folder
 
     Returns:
         fiber_link (FiberLink): Info about fiber span consisting of
@@ -2602,12 +2654,12 @@ def load_previous_run(basePath: str) -> [FiberLink, InputSignal]:
         input_signal (InputSignal): Info about input signal
 
     """
-    print(f"Loading run in {basePath}")
+    print(f"Loading run in {base_path}")
 
-    fiber_link = load_fiber_link(basePath + "\\input_info\\")
-    input_signal = load_input_signal(basePath + "\\input_info\\")
+    fiber_link = load_fiber_link( os.path.join(base_path,'input_info') )
+    input_signal = load_input_signal( os.path.join(base_path,'input_info') )
 
-    print(f"Successfully loaded run in {basePath}")
+    print(f"Successfully loaded run in {base_path}")
 
     return fiber_link, input_signal
 
@@ -2939,7 +2991,7 @@ def SSFM(
     base_dir = dirs[0]
     current_dir = dirs[1]
 
-    new_folder_name = "input_info\\"
+    new_folder_name = "input_info"
     new_folder_path = new_folder_name
     os.makedirs(new_folder_path, exist_ok=True)
     os.chdir(new_folder_path)
@@ -2969,10 +3021,10 @@ def SSFM(
 
         # Initialize arrays to store pulse and spectrum throughout fiber
         ssfm_result = SSFMResult(
-            current_input_signal, fiber, experiment_name, dirs
+            current_input_signal, fiber, 0.0, experiment_name, dirs
         )
 
-        new_folder_name = "Length_info\\"
+        new_folder_name = "Length_info"
         new_folder_path = new_folder_name
         os.makedirs(new_folder_path, exist_ok=True)
         os.chdir(new_folder_path)
@@ -3152,7 +3204,6 @@ def SSFM(
                 )
         # Append list of output results
 
-        ssfm_result_list.append(ssfm_result)
 
         # Take signal at output of this fiber and feed it into the next one
         current_input_signal.pulse_field = np.copy(
@@ -3162,6 +3213,10 @@ def SSFM(
             ssfm_result.spectrum_field_matrix[z_step_index + 1, :]
         )
         t_fiber_end = time()
+        ssfm_result.run_time_s = t_fiber_end-t_fiber_start
+
+        ssfm_result_list.append(ssfm_result)
+
         print(f"This SSFM run took a total of {t_fiber_end-t_fiber_start:.4f} seconds!")
 
     print("Finished running SSFM!!!")
@@ -3173,6 +3228,16 @@ def SSFM(
 
     print(f"This SSFM run took a total of {t_ssfm_end-t_ssfm_start:.4f} seconds!")
     return ssfm_result_list
+
+
+def get_total_run_time_s(ssfm_result_list: list[SSFMResult]):
+
+    total_run_time_s=0.0
+
+    for ssfm_result in ssfm_result_list:
+        total_run_time_s+= ssfm_result.run_time_s
+
+    return total_run_time_s
 
 
 def save_plot(basename: str):
@@ -5585,8 +5650,11 @@ def extract_spectrum_range(freq_list_Hz: npt.NDArray[float],
     index2 = array2.argmin()
 
     outputArray = np.zeros_like(spectral_field) * 1j
+    if len(np.shape(spectral_field))==1:
+        outputArray[index1:index2] = spectral_field[index1:index2]
 
-    outputArray[index1:index2] = spectral_field[index1:index2]
+    else:
+        outputArray[:,index1:index2] = spectral_field[:,index1:index2]
 
     return outputArray
 
@@ -5963,6 +6031,24 @@ def plot_dispersion_graph(time_freq: TimeFreq, fiber: FiberSpan):
     plt.show()
 
 
+
+def plot_IQ_diagram(field_in_time_domain):
+
+    fig,ax=plt.subplots()
+    ax.axvline(x=0,color='k')
+    ax.axhline(y=0,color='k')
+    ax.plot(np.real(field_in_time_domain),np.imag(field_in_time_domain),'.')
+    ax.set_xlabel('I')
+    ax.set_ylabel('Q')
+    ax.set_xlim(-np.max(np.abs(field_in_time_domain)),np.max(np.abs(field_in_time_domain)))
+
+    ax.set_aspect('equal', adjustable='box')
+    plt.show()
+
+
+
+
+
 if __name__ == "__main__":
 
     np.random.seed(123)
@@ -5970,10 +6056,10 @@ if __name__ == "__main__":
 
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
-    N = 2 ** 14  # Number of points
-    dt = 1.8e-15  # Time resolution [s]
+    N = 2 ** 15  # Number of points
+    dt = 0.8e-15  # Time resolution [s]
 
-    center_freq_test = FREQ_1060_NM_HZ  # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = 5000e12 # FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(number_of_points=N,
                               time_step_s=dt,
                               center_frequency_Hz=center_freq_test)
@@ -5986,29 +6072,39 @@ if __name__ == "__main__":
 
     # Set up signal
     test_FFT_tol = 1e-2
-    test_amplitude_sqrt_W = np.sqrt(64)
-    test_pulse_type = "sech"
-    test_duration_s = 100e-15
-    test_freq_offset_Hz = 0
+    CW_amplitude_sqrt_W = np.sqrt(0.1)
+    CW_pulse_type = "cw"
+
+    pulse_amplitude_sqrt_W = np.sqrt(10)
+    pulse_duration_s = 500e-12
+    pulse_type = 'gauss'
+    pulse_freq_offset_Hz = +10e9
 
 
     test_input_signal = InputSignal(time_freq_test,
-                                    test_duration_s,
-                                    test_amplitude_sqrt_W,
-                                    test_pulse_type,
-                                    freq_offset_Hz=test_freq_offset_Hz,
+                                    pulse_duration_s,
+                                    amplitude_sqrt_W = CW_amplitude_sqrt_W,
+                                    pulse_type=CW_pulse_type,
                                     FFT_tol=test_FFT_tol)
 
 
+    test_input_signal.pulse_field+= get_pulse(time_freq_test.t_s(),
+                                              pulse_duration_s,
+                                              0,
+                                              amplitude_sqrt_W=pulse_amplitude_sqrt_W,
+                                              freq_offset_Hz=pulse_freq_offset_Hz,
+                                              pulse_type=pulse_type)
+
+    test_input_signal.update_spectrum()
+    test_input_signal.describe_input_signal()
 
 
 
 
+    alpha_test = -0.22/1e3  # dB/m
 
-    alpha_test = -0.0#-0.22/1e3  # dB/m
 
 
-    #beta_list = [-3.051721e-27]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
 
     beta_list = [-3.051721e-27,
                   7.29029e-41,
@@ -6018,115 +6114,80 @@ if __name__ == "__main__":
                   -1.1464e-113,
                   1.8802e-128,
                   -1.5054e-143]  # [s^2/m,s^3/m,...]  s^(entry+2)/m
-    # beta_list=[0]
+
 
     gamma_test = 0.09# 1*1e-3  # 1/W/m
 
-    length_test = 5  # m
-    number_of_steps = 2**10
+    length_test = 0.1  # m
+    number_of_steps = 2**1
 
-    fiber_test0 = FiberSpan(
+    fiber_test = FiberSpan(
         length_test,
         number_of_steps,
         gamma_test,
         beta_list,
         alpha_test,
-        use_self_steepening_flag=False,
-        raman_model="none",
-        approximate_raman_flag=False)
-
-    fiber_test1 = FiberSpan(
-        length_test,
-        number_of_steps,
-        gamma_test,
-        beta_list,
-        alpha_test,
-        use_self_steepening_flag=False,
-        raman_model="silica_exact",
-        approximate_raman_flag=False)
-
-    fiber_test2 = FiberSpan(
-        length_test,
-        number_of_steps,
-        gamma_test,
-        beta_list,
-        alpha_test,
-        use_self_steepening_flag=False,
-        raman_model="silica_exact",
-        approximate_raman_flag=True)
-
-    fiber_list0 = [fiber_test0]
-    fiber_link0 = FiberLink(fiber_list0)
-
-    fiber_list1 = [fiber_test1]
-    fiber_link1 = FiberLink(fiber_list1)
-
-    fiber_list2 = [fiber_test2]
-    fiber_link2 = FiberLink(fiber_list2)
+        use_self_steepening_flag=True,
+        raman_model="agrawal")
 
 
 
+    #assert 1==2
+    fiber_list = [fiber_test]
+    fiber_link = FiberLink(fiber_list)
 
-    #Each additional run should take about 20s.
-    N_runs = 1
+    exp_name='abc'
+    ssfm_result_list = SSFM(
+        fiber_link,
+        test_input_signal,
+        show_progress_flag=True,
+        experiment_name=exp_name
+    )
+    assert 1==2
+    #nrange = 1400#1600
+    dB_cutoff = -80
+
+    plot_everything_about_result(
+        ssfm_result_list,
+        dB_cutoff_pulse=dB_cutoff,
+        nrange_pulse=2400,
+        dB_cutoff_spectrum=dB_cutoff,
+        nrange_spectrum=3600,#1200,
+        show_3D_plot_flag=False)
 
 
-    time_array_SPM = np.zeros(N_runs)*1.0
-    time_array_exact_Raman = np.zeros(N_runs)*1.0
-    time_array_approx_Raman = np.zeros(N_runs)*1.0
+    final_spectrum = ssfm_result_list[-1].spectrum_field_matrix[-1,:]
+    final_spectrum_CW = extract_spectrum_range(time_freq_test.f_abs_Hz(),
+                                                final_spectrum,
+                                                FREQ_1550_NM_HZ-2e9,
+                                                FREQ_1550_NM_HZ+2e9)
 
-    for i in range(N_runs):
+    initial_spectrum = ssfm_result_list[-1].spectrum_field_matrix[0,:]
+    initial_spectrum_CW = extract_spectrum_range(time_freq_test.f_abs_Hz(),
+                                                initial_spectrum,
+                                                FREQ_1550_NM_HZ-2e9,
+                                                FREQ_1550_NM_HZ+2e9)
 
 
-        exp_name='approx_raman_0'
-        time_start = time()
-        ssfm_result_list0 = SSFM(
-            fiber_link0,
-            test_input_signal,
-            show_progress_flag=False,
-            experiment_name=exp_name
-        )
-        time_array_SPM[i] = time()-time_start
 
-        exp_name='approx_raman_1'
-        time_start = time()
+    final_pulse_CW = get_pulse_from_spectrum(time_freq_test.f_rel_Hz(), final_spectrum_CW,FFT_tol=1e-2)
+    initial_pulse_CW = get_pulse_from_spectrum(time_freq_test.f_rel_Hz(), initial_spectrum_CW,FFT_tol=1e-2)
 
-        ssfm_result_list1 = SSFM(
-            fiber_link1,
-            test_input_signal,
-            show_progress_flag=False,
-            experiment_name=exp_name
-        )
-        time_array_exact_Raman[i] = time()-time_start
+    fig,ax=plt.subplots()
+    ax.plot(time_freq_test.t_s()/1e-9,get_phase(initial_pulse_CW),label='Initial CW phase')
+    ax.plot(time_freq_test.t_s()/1e-9,get_phase(final_pulse_CW),label='Final CW phase')
+    #ax.set_xlim(-5,5)
+    ax.set_xlabel('Time [ns] ')
+    ax.set_ylabel('Phase [rad] ')
+    ax.legend()
+    plt.show()
 
-        exp_name='approx_raman_2'
-        time_start = time()
 
-        ssfm_result_list2 = SSFM(
-            fiber_link2,
-            test_input_signal,
-            show_progress_flag=False,
-            experiment_name=exp_name
-        )
-        time_array_approx_Raman[i] = time()-time_start
-
-    nrange = 1400#1600
-    dB_cutoff = -40
-    plot_first_and_last_spectrum(ssfm_result_list0, nrange, dB_cutoff)
-    plot_first_and_last_spectrum(ssfm_result_list1, nrange, dB_cutoff)
-    plot_first_and_last_spectrum(ssfm_result_list2, nrange, dB_cutoff)
-
-    plot_spectrum_matrix_2D(ssfm_result_list0, nrange, dB_cutoff)
-    plot_spectrum_matrix_2D(ssfm_result_list1, nrange, dB_cutoff)
-    plot_spectrum_matrix_2D(ssfm_result_list2, nrange, dB_cutoff)
-
-    bins=np.linspace(0,20,40)
-    fig,ax=plt.subplots(dpi=300)
-    ax.hist(time_array_SPM,bins=bins,alpha=0.5,label=f"SPM only: {np.mean(time_array_SPM):.2f}s")
-    ax.hist(time_array_exact_Raman,bins=bins,alpha=0.5,label=f"Exact Raman: {np.mean(time_array_exact_Raman):.2f}s")
-    ax.hist(time_array_approx_Raman,bins=bins,alpha=0.5,label=f"Approx Raman: {np.mean(time_array_approx_Raman):.2f}s")
-
-    ax.set_xlabel('Time [s]')
-    ax.set_ylabel('Counts')
+    fig,ax=plt.subplots()
+    ax.plot(time_freq_test.t_s()/1e-9,get_phase(initial_pulse_CW),label='Initial CW phase')
+    ax.plot(time_freq_test.t_s()/1e-9,get_phase(final_pulse_CW),label='Final CW phase')
+    ax.set_xlim(-5,5)
+    ax.set_xlabel('Time [ns] ')
+    ax.set_ylabel('Phase [rad] ')
     ax.legend()
     plt.show()
