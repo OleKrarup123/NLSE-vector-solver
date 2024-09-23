@@ -497,6 +497,17 @@ class TimeFreq:
         if self.describe_time_freq_flag:
             self.describe_config()
 
+
+    def get_time_freq_info_dict(self):
+
+
+        time_freq_dict = {'number_of_points':self.number_of_points,
+                          'time_step_s':self.time_step_s,
+                          'center_frequency_Hz':self.center_frequency_Hz,
+                          'describe_time_freq_flag':self.describe_time_freq_flag}
+
+        return time_freq_dict
+
     def t_s(self):
         """
         Function returns the array of times in [s] at which the pulse field is
@@ -1558,6 +1569,32 @@ class FiberSpan:
     def z_m(self):
         return np.linspace(0, self.length_m, self.number_of_steps + 1)
 
+    def get_fiber_info_dict(self):
+
+
+
+        fiber_dict = { 'length_m':self.length_m ,
+                      'number_of_steps':self.number_of_steps ,
+                      'gamma_per_W_per_m':self.gamma_per_W_per_m ,
+                      'beta_list':self.beta_list ,
+                      'alpha_dB_per_m':self.alpha_dB_per_m ,
+                      'use_self_steepening_flag':self.use_self_steepening_flag ,
+                      'raman_model':self.raman_model ,
+                      'approximate_raman_flag':self.approximate_raman_flag ,
+                      'relative_raman_contribution':self.relative_raman_contribution ,
+                      'input_atten_dB':self.input_atten_dB ,
+                      'input_amp_dB':self.input_amp_dB ,
+                      'input_noise_factor_dB':self.input_noise_factor_dB ,
+                      'input_disp_comp_s2':self.input_disp_comp_s2 ,
+                      'output_disp_comp_s2':self.output_disp_comp_s2 ,
+                      'output_amp_dB':self.output_amp_dB ,
+                      'output_noise_factor_dB':self.output_noise_factor_dB ,
+                      'output_atten_dB':self.output_atten_dB ,
+                      'describe_fiber_flag':self.describe_fiber_flag }
+
+        return fiber_dict
+
+
     def describe_fiber(self, destination=None):
         """
         Prints a description of the fiber to destination
@@ -1628,6 +1665,14 @@ class FiberLink:
     # post init
     number_of_fibers_in_span: int = field(init=False)
     # defaults
+
+    def get_fiber_link_dict(self):
+
+        fiber_link_dict = {}
+        for fiber_index, fiber in enumerate(fiber_list):
+            fiber_link_dict[f"fiber_{fiber_index}"] = fiber.get_fiber_info_dict()
+
+        return fiber_link_dict
 
     def __post_init__(self):
         """
@@ -1717,6 +1762,7 @@ class FiberLink:
 
         fiber_df = pd.DataFrame(
             columns=[
+                "fiber_index",
                 "length_m",
                 "number_of_steps",
                 "gamma_per_W_per_m",
@@ -1743,8 +1789,9 @@ class FiberLink:
             ]
         )
 
-        for fiber in self.fiber_list:
+        for fiber_index, fiber in enumerate(self.fiber_list):
             fiber_df.loc[len(fiber_df.index)] = [
+                fiber_index,
                 fiber.length_m,
                 fiber.number_of_steps,
                 fiber.gamma_per_W_per_m,
@@ -1893,6 +1940,27 @@ class InputSignal:
 
         if self.describe_input_signal_flag:
             self.describe_input_signal()
+
+    def get_input_signal_dict(self):
+        time_freq_dict = self.time_freq.get_time_freq_info_dict()
+
+
+
+
+        signal_dict = {'time_freq':time_freq_dict,
+                       'duration_s':self.duration_s,
+                       'amplitude_sqrt_W':self.amplitude_sqrt_W ,
+                       'pulse_type':self.pulse_type ,
+                       'time_offset_s':self.time_offset_s ,
+                       'freq_offset_Hz':self.freq_offset_Hz ,
+                       'chirp':self.chirp ,
+                       'order':self.order ,
+                       'roll_off_factor':self.roll_off_factor ,
+                       'noise_stdev_sqrt_W':self.noise_stdev_sqrt_W ,
+                       'phase_rad':self.phase_rad ,
+                       'FFT_tol':self.FFT_tol ,
+                       'describe_input_signal_flag':self.describe_input_signal_flag }
+        return signal_dict
 
     def get_peak_pulse_power(self) -> float:
         """
@@ -3001,6 +3069,9 @@ def SSFM(
 
     # Save input signal parameters
     input_signal.save_input_signal()
+
+    save_run_info_as_json(input_signal_dict=input_signal.get_input_signal_dict(),
+                          fiber_link_dict=fiber_link.get_fiber_link_dict() )
 
     # Return to main output directory
     os.chdir(current_dir)
@@ -6049,6 +6120,25 @@ def plot_IQ_diagram(field_in_time_domain):
 
 
 
+def save_run_info_as_json(input_signal_dict: dict,
+                          fiber_link_dict: dict):
+
+    total_dict = {'input_signal':input_signal_dict,
+                  'fiber_link':fiber_link_dict}
+
+    num_indent_spaces = 4
+    json_object = json.dumps(total_dict, indent=num_indent_spaces)
+
+    with open("run_info.json", "w") as outfile:
+        outfile.write(json_object)
+
+    print("Saved dict")
+
+    pass
+
+
+
+
 if __name__ == "__main__":
 
     np.random.seed(123)
@@ -6133,8 +6223,10 @@ if __name__ == "__main__":
 
 
     #assert 1==2
-    fiber_list = [fiber_test]
+    fiber_list = [fiber_test,fiber_test,fiber_test,fiber_test]
     fiber_link = FiberLink(fiber_list)
+
+
 
     exp_name='abc'
     ssfm_result_list = SSFM(
