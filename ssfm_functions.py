@@ -25,7 +25,7 @@ import os
 import json
 
 from dataclasses import dataclass, field
-from typing import TextIO, Callable
+from typing import TextIO, Callable, List
 from datetime import datetime
 import numpy as np
 import numpy.typing as npt
@@ -1209,6 +1209,85 @@ def get_pulse(
                              phase_factor)
 
 
+
+def ideal_power_filter(freq_abs_Hz: npt.NDArray[float],
+                       center_freq_and_bandwidth_pair_Hz: list[list[float]]
+                       ) -> npt.NDArray[complex]:
+    """
+    Ideal arbitrary power filter.
+
+    Given an array of frequencies and lists of center frequencies and
+    bandwidths, generate an array that filters out frequencies in these
+    bandwidth ranges centered on these frequencies.
+
+    center_freq_and_bandwidth_pair_Hz = [center_freq_list_Hz,
+                                         bandwidth_list_Hz]
+
+    For example, if
+    center_freq_list_Hz = [192.2e12,193.0e12] and
+    bandwidth_list_Hz = [4e9,2e9], then we return an array, which is zero
+    at all entries except those corresponding to the intervals
+
+    [192.0e12 to 192.4e12]
+
+    and
+
+    [192.9e12 to 193.1e12],
+
+    where entries will be equal to 1. Any "overlap" is set to 1 as well.
+
+    This approach allows ideal input and output filters to be specified and
+    for their properties to be saved and loaded as simple lists for
+    easy recovery.
+
+    If center_freq_and_bandwidth_pair_Hz contains 2 empty arrays, a list
+    consisting only of 1 will be return implying no filtering.
+
+
+    Parameters
+    ----------
+    freq_abs_Hz : npt.NDArray[float]
+        Absolute frequency range of the simulation.
+    center_freq_list_Hz : npt.NDArray[float]
+        List of center frequencies we want to extract.
+    bandwidth_list_Hz : npt.NDArray[float]
+        Corresponding bandwidths around each center frequency.
+
+    Returns
+    -------
+    filter_array : npt.NDArray[complex]
+        Array containing 1 for frequencies to be extracted.
+
+    """
+
+    center_freq_list_Hz , bandwidth_list_Hz = center_freq_and_bandwidth_pair_Hz
+
+    assert len(center_freq_list_Hz)==len( bandwidth_list_Hz), f"""ERROR:
+        {len(center_freq_list_Hz) = } and {len( bandwidth_list_Hz) =}
+        but they should have equal lengths!!!"""
+
+    if len(center_freq_list_Hz)==0:
+        return np.ones_like(freq_abs_Hz)*1.0j
+
+    filter_array = np.zeros_like(freq_abs_Hz)*1.0j
+
+    for current_freq,current_BW in zip(center_freq_list_Hz,bandwidth_list_Hz):
+
+        freq_min_Hz = current_freq-current_BW/2
+        freq_max_Hz = current_freq+current_BW/2
+
+
+
+        array1 = np.abs(freq_abs_Hz - freq_min_Hz)
+        index1 = array1.argmin()
+
+        array2 = np.abs(freq_abs_Hz - freq_max_Hz)
+        index2 = array2.argmin()
+
+        filter_array[index1:index2]=1.0+0.0j
+
+    return filter_array
+
 #TODO: Find a way to save this function when fiber is saved.
 def gaussian_filter_power(freq_Hz: npt.NDArray[float],
                           center_freq_Hz: float,
@@ -1339,12 +1418,10 @@ class FiberSpan:
     input_atten_dB: float = 0.0
     input_amp_dB: float = 0.0
     input_noise_factor_dB: float = -1e3
-    input_filter_power_function: Callable[[
-        npt.NDArray[float]], npt.NDArray[complex]] = no_filter
+    input_filter_center_freq_and_BW_Hz_lists: list = field(default_factory=lambda: [[],[]])
     input_disp_comp_s2: float = 0.0
     output_disp_comp_s2: float = 0.0
-    output_filter_power_function: Callable[[
-        npt.NDArray[float]], npt.NDArray[complex]] = no_filter
+    output_filter_center_freq_and_BW_Hz_lists: list = field(default_factory=lambda: [[],[]])
     output_amp_dB: float = 0.0
     output_noise_factor_dB: float = -1e3
     output_atten_dB: float = 0.0
@@ -1585,8 +1662,10 @@ class FiberSpan:
                       'input_atten_dB':self.input_atten_dB ,
                       'input_amp_dB':self.input_amp_dB ,
                       'input_noise_factor_dB':self.input_noise_factor_dB ,
+                      'input_filter_center_freq_and_BW_Hz_lists': self.input_filter_center_freq_and_BW_Hz_lists,
                       'input_disp_comp_s2':self.input_disp_comp_s2 ,
                       'output_disp_comp_s2':self.output_disp_comp_s2 ,
+                      'output_filter_center_freq_and_BW_Hz_lists': self.output_filter_center_freq_and_BW_Hz_lists,
                       'output_amp_dB':self.output_amp_dB ,
                       'output_noise_factor_dB':self.output_noise_factor_dB ,
                       'output_atten_dB':self.output_atten_dB ,
@@ -3138,6 +3217,8 @@ def SSFM(
         disp_and_loss_half_step = disp_and_loss ** 0.5
 
         # Precalculate constants for nonlinearity
+        input_filter=np.sqrt(ideal_power_filter(f+fc, fiber.input_filter_center_freq_and_BW_Hz_lists))
+        output_filter=np.sqrt(ideal_power_filter(f+fc, fiber.output_filter_center_freq_and_BW_Hz_lists))
 
         # Use simple NL model by default if Raman is ignored
 
@@ -3216,7 +3297,7 @@ def SSFM(
         ) * disp_and_loss_half_step*input_disp_comp_factor
 
         # apply input filter function
-        spectrum *= np.sqrt(fiber.input_filter_power_function(f+fc))
+        spectrum *= input_filter
 
         pulse = get_pulse_from_spectrum(
             input_signal.time_freq.f_rel_Hz(), spectrum, FFT_tol=FFT_tol)
@@ -3248,8 +3329,7 @@ def SSFM(
                 randomPhaseFactor = np.exp(1j * randomPhases)
                 output_atten_field_lin = np.sqrt(dB_to_lin(
                     fiber.output_atten_dB))
-                output_filter_field_array = np.sqrt(
-                    fiber.output_filter_power_function(f+fc))
+                output_filter_field_array = output_filter
                 output_disp_comp_factor = np.exp(1j*fiber.output_disp_comp_s2*(2*pi*f)**2)
 
                 output_amp_field_factor = 10 ** (fiber.output_amp_dB / 20)
@@ -6175,9 +6255,10 @@ def load_fiber_link_from_json(path_to_json:str) -> FiberLink:
                     input_atten_dB = fiber_info_dict["input_atten_dB"],
                     input_amp_dB = fiber_info_dict["input_amp_dB"],
                     input_noise_factor_dB= fiber_info_dict["input_noise_factor_dB"] ,
-
+                    input_filter_center_freq_and_BW_Hz_lists = fiber_info_dict["input_filter_center_freq_and_BW_Hz_lists"],
                     input_disp_comp_s2= fiber_info_dict["input_disp_comp_s2"] ,
                     output_disp_comp_s2 = fiber_info_dict["output_disp_comp_s2"],
+                    output_filter_center_freq_and_BW_Hz_lists = fiber_info_dict["output_filter_center_freq_and_BW_Hz_lists"],
 
                     output_amp_dB= fiber_info_dict["output_amp_dB"] ,
                     output_noise_factor_dB = fiber_info_dict["output_noise_factor_dB"],
@@ -6230,15 +6311,14 @@ if __name__ == "__main__":
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
 
 
-    json_path = 'C:\\Users\\okrarup\\OneDrive - Ciena Corporation\\Desktop\\SSFM folder\\NLSE-vector-solver\\Simulation Results\\abc\\2024_9_24_14_36_14\\input_info\\run_info.json'
-    run_SSFM_from_json(json_path,'abcd',True)
-
-    assert 1==2
+    #json_path = 'C:\\Users\\okrarup\\OneDrive - Ciena Corporation\\Desktop\\SSFM folder\\NLSE-vector-solver\\Simulation Results\\filter_save_test\\2024_9_24_19_47_28\\input_info\\run_info.json'
+    #run_SSFM_from_json(json_path,'abcd',True)
+    #assert 1==2
 
     N = 2 ** 15  # Number of points
-    dt = 0.8e-15  # Time resolution [s]
+    dt = 0.8e-12  # Time resolution [s]
 
-    center_freq_test = 5000e12 # FREQ_CENTER_C_BAND_HZ
+    center_freq_test = FREQ_CENTER_C_BAND_HZ
     time_freq_test = TimeFreq(number_of_points=N,
                               time_step_s=dt,
                               center_frequency_Hz=center_freq_test)
@@ -6307,7 +6387,9 @@ if __name__ == "__main__":
         beta_list,
         alpha_test,
         use_self_steepening_flag=True,
-        raman_model="agrawal")
+        raman_model="agrawal",
+        input_filter_center_freq_and_BW_Hz_lists=[ [193.2e12,194.0e12],[40e9,20e9]  ],
+        output_filter_center_freq_and_BW_Hz_lists=[ [193.3e12,194.0e12],[50e9,20e9]  ])
 
 
 
@@ -6317,7 +6399,7 @@ if __name__ == "__main__":
 
 
 
-    exp_name='abc'
+    exp_name='filter_save_test'
     ssfm_result_list = SSFM(
         fiber_link,
         test_input_signal,
