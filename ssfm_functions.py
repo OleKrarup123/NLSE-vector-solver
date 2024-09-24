@@ -1669,7 +1669,7 @@ class FiberLink:
     def get_fiber_link_dict(self):
 
         fiber_link_dict = {}
-        for fiber_index, fiber in enumerate(fiber_list):
+        for fiber_index, fiber in enumerate(self.fiber_list):
             fiber_link_dict[f"fiber_{fiber_index}"] = fiber.get_fiber_info_dict()
 
         return fiber_link_dict
@@ -3000,6 +3000,19 @@ def get_noise_PSD(NF_dB: float,
     G_lin = dB_to_lin(gain_dB)
 
     return 0.5 * NF_lin * G_lin * PLANCKCONST_J_PER_HZ * f_Hz / df_Hz
+
+
+def run_SSFM_from_json(path_to_json:str,
+                       experiment_name:str = "most_recent_run",
+                       show_progress_flag: bool = False)-> list[SSFMResult]:
+
+    fiber_link = load_fiber_link_from_json(path_to_json)
+    input_signal = load_input_signal_from_json(path_to_json)
+
+    return SSFM(fiber_link,
+                input_signal,
+                experiment_name,
+                show_progress_flag)
 
 
 def SSFM(
@@ -6137,7 +6150,77 @@ def save_run_info_as_json(input_signal_dict: dict,
     pass
 
 
+def load_fiber_link_from_json(path_to_json:str) -> FiberLink:
 
+    with open(path_to_json, "r") as json_file:
+        data = json.load(json_file)
+
+        n_fibers= str(data).count('length_m')
+        fiber_list_from_json = []
+        for fiber_idx in range(n_fibers):
+            fiber_info_dict = data["fiber_link"][f"fiber_{fiber_idx}"]
+
+            fiber_list_from_json.append(
+                FiberSpan(
+                    length_m =fiber_info_dict["length_m"] ,
+                    number_of_steps = fiber_info_dict["number_of_steps"],
+                    gamma_per_W_per_m= fiber_info_dict["gamma_per_W_per_m"],
+                    beta_list= fiber_info_dict["beta_list"],
+                    alpha_dB_per_m= fiber_info_dict["alpha_dB_per_m"],
+
+                    use_self_steepening_flag= fiber_info_dict["use_self_steepening_flag"] ,
+                    raman_model= fiber_info_dict["raman_model"] ,
+                    approximate_raman_flag= fiber_info_dict["approximate_raman_flag"] ,
+                    relative_raman_contribution= fiber_info_dict["relative_raman_contribution"] ,
+                    input_atten_dB = fiber_info_dict["input_atten_dB"],
+                    input_amp_dB = fiber_info_dict["input_amp_dB"],
+                    input_noise_factor_dB= fiber_info_dict["input_noise_factor_dB"] ,
+
+                    input_disp_comp_s2= fiber_info_dict["input_disp_comp_s2"] ,
+                    output_disp_comp_s2 = fiber_info_dict["output_disp_comp_s2"],
+
+                    output_amp_dB= fiber_info_dict["output_amp_dB"] ,
+                    output_noise_factor_dB = fiber_info_dict["output_noise_factor_dB"],
+                    output_atten_dB = fiber_info_dict["output_atten_dB"],
+                    describe_fiber_flag = fiber_info_dict["describe_fiber_flag"]
+                    )
+                )
+    return FiberLink(fiber_list_from_json)
+
+
+def load_input_signal_from_json(path_to_json:str) -> InputSignal:
+
+    with open(path_to_json, "r") as json_file:
+        data = json.load(json_file)
+
+        signal_dict = data["input_signal"]
+
+        time_freq = TimeFreq(number_of_points= signal_dict["time_freq"]["number_of_points"],
+                             time_step_s =signal_dict["time_freq"]["time_step_s"],
+                             center_frequency_Hz=signal_dict["time_freq"]["center_frequency_Hz"],
+                             describe_time_freq_flag=signal_dict["time_freq"]["describe_time_freq_flag"]
+                             )
+
+        input_signal = InputSignal(time_freq=time_freq,
+                                   duration_s = signal_dict["duration_s"] ,
+                                   amplitude_sqrt_W= signal_dict["amplitude_sqrt_W"],
+                                   pulse_type= signal_dict["pulse_type"],
+                                   time_offset_s= signal_dict["time_offset_s"],
+                                   freq_offset_Hz= signal_dict["freq_offset_Hz"],
+                                   chirp= signal_dict["chirp"],
+                                   order= signal_dict["order"],
+                                   roll_off_factor= signal_dict["roll_off_factor"],
+                                   noise_stdev_sqrt_W= signal_dict["noise_stdev_sqrt_W"],
+                                   phase_rad= signal_dict["phase_rad"],
+                                   FFT_tol= signal_dict["FFT_tol"],
+                                   describe_input_signal_flag= signal_dict["describe_input_signal_flag"])
+
+
+
+
+
+
+    return input_signal
 
 if __name__ == "__main__":
 
@@ -6145,6 +6228,12 @@ if __name__ == "__main__":
 
 
     os.chdir(os.path.realpath(os.path.dirname(__file__)))
+
+
+    json_path = 'C:\\Users\\okrarup\\OneDrive - Ciena Corporation\\Desktop\\SSFM folder\\NLSE-vector-solver\\Simulation Results\\abc\\2024_9_24_14_36_14\\input_info\\run_info.json'
+    run_SSFM_from_json(json_path,'abcd',True)
+
+    assert 1==2
 
     N = 2 ** 15  # Number of points
     dt = 0.8e-15  # Time resolution [s]
