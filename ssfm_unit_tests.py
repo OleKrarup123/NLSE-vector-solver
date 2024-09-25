@@ -9,39 +9,39 @@ from ssfm_functions import *
 from scipy.special import airy
 from scipy.optimize import fsolve
 
-def compare_fiber_links(fiber_link_1: FiberLink,fiber_link_2: FiberLink):
+# def compare_fiber_links(fiber_link_1: FiberLink,fiber_link_2: FiberLink):
 
-    for fiber_idx, (fiber_1, fiber_2) in enumerate(zip(fiber_link_1.fiber_list,
-                                                     fiber_link_2.fiber_list)):
+#     for fiber_idx, (fiber_1, fiber_2) in enumerate(zip(fiber_link_1.fiber_list,
+#                                                      fiber_link_2.fiber_list)):
 
 
-        assert compare_fibers(fiber_1, fiber_2), f"""Fibers at index {fiber_idx} do not match!!!"""
+#         assert compare_fibers(fiber_1, fiber_2), f"""Fibers at index {fiber_idx} do not match!!!"""
 
-    return True
+#     return True
 
-def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
-    assert np.isclose(fiber_1.length_m, fiber_2.length_m,rtol=1e-6,atol=1e-100)
-    assert fiber_1.number_of_steps == fiber_2.number_of_steps
+# def compare_fibers(fiber_1: FiberSpan, fiber_2: FiberSpan) -> bool:
+#     assert np.isclose(fiber_1.length_m, fiber_2.length_m,rtol=1e-6,atol=1e-100)
+#     assert fiber_1.number_of_steps == fiber_2.number_of_steps
 
-    assert np.isclose(fiber_1.gamma_per_W_per_m, fiber_2.gamma_per_W_per_m,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.gamma_per_W_per_m, fiber_2.gamma_per_W_per_m,rtol=1e-6,atol=1e-100)
 
-    for beta_n_1, beta_n_2 in zip(fiber_1.beta_list, fiber_2.beta_list):
-        assert np.isclose(beta_n_1,beta_n_2)
+#     for beta_n_1, beta_n_2 in zip(fiber_1.beta_list, fiber_2.beta_list):
+#         assert np.isclose(beta_n_1,beta_n_2)
 
-    assert np.isclose(fiber_1.alpha_dB_per_m , fiber_2.alpha_dB_per_m,rtol=1e-6,atol=1e-100)
-    assert fiber_1.use_self_steepening_flag == fiber_2.use_self_steepening_flag
-    assert fiber_1.raman_model == fiber_2.raman_model
-    assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB,rtol=1e-6,atol=1e-100)
-    assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB,rtol=1e-6,atol=1e-100)
-    assert np.isclose(fiber_1.input_atten_dB , fiber_2.input_atten_dB,rtol=1e-6,atol=1e-100)
-    assert np.isclose(fiber_1.input_disp_comp_s2 , fiber_2.input_disp_comp_s2,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.alpha_dB_per_m , fiber_2.alpha_dB_per_m,rtol=1e-6,atol=1e-100)
+#     assert fiber_1.use_self_steepening_flag == fiber_2.use_self_steepening_flag
+#     assert fiber_1.raman_model == fiber_2.raman_model
+#     assert np.isclose(fiber_1.input_amp_dB , fiber_2.input_amp_dB,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.input_noise_factor_dB , fiber_2.input_noise_factor_dB,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.input_atten_dB , fiber_2.input_atten_dB,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.input_disp_comp_s2 , fiber_2.input_disp_comp_s2,rtol=1e-6,atol=1e-100)
 
-    assert np.isclose(fiber_1.output_amp_dB , fiber_2.output_amp_dB,rtol=1e-6,atol=1e-100)
-    assert np.isclose(fiber_1.output_noise_factor_dB , fiber_2.output_noise_factor_dB,rtol=1e-6,atol=1e-100)
-    assert np.isclose(fiber_1.output_atten_dB , fiber_2.output_atten_dB,rtol=1e-6,atol=1e-100)
-    assert np.isclose(fiber_1.output_disp_comp_s2 , fiber_2.output_disp_comp_s2,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.output_amp_dB , fiber_2.output_amp_dB,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.output_noise_factor_dB , fiber_2.output_noise_factor_dB,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.output_atten_dB , fiber_2.output_atten_dB,rtol=1e-6,atol=1e-100)
+#     assert np.isclose(fiber_1.output_disp_comp_s2 , fiber_2.output_disp_comp_s2,rtol=1e-6,atol=1e-100)
 
-    return True
+#     return True
 
 
 
@@ -151,17 +151,13 @@ def self_steepening_pulse(time_freq: TimeFreq,
         return np.exp(-(tau - 3*s*I*Z)**2)-I
 
 
-    #I_0=pd.read_csv("SS.csv")
+
     I_0 = np.exp(-0.5*tau**2)
 
     print("Starting fsolve")
     I_sol=fsolve(f,I_0)
 
-    # SS_df = pd.DataFrame(I_sol)
-    # SS_df.to_csv("SS.csv", index=False)
 
-    # tau_df = pd.DataFrame(tau)
-    # tau_df.to_csv("tau.csv", index=False)
 
     return I_sol
 
@@ -248,18 +244,11 @@ def unit_test_saveload_TimeFreq(show_plot_flag = False):
         experiment_name=exp_name
     )
 
-    time_freq_loaded = load_TimeFreq(ssfm_result_list[0].dirs[1])
 
-    assert len(time_freq_loaded.t_s())==N, f"""ERROR: {len(time_freq_loaded.t) = }
-    but {N = }!!!"""
-    assert time_freq_loaded.time_step_s==dt, f"""ERROR: {time_freq_loaded.time_step_s = }
-    but {dt = }!!!"""
+    path_to_json = os.path.join(ssfm_result_list[0].dirs[1],"input_info",'run_info.json')
+    input_signal_loaded = load_input_signal_from_json(path_to_json)
 
-    relative_freq_dif=np.abs(time_freq_loaded.center_frequency_Hz
-                       -center_freq_test)/center_freq_test
-    assert relative_freq_dif<1e-12, f"""ERROR {time_freq_loaded.center_frequency_Hz = }
-    but {center_freq_test = }, which is too different!"""
-
+    assert input_signal_loaded.time_freq == time_freq_test
     print("Successfully saved and reloaded TimeFreq!")
 
 
@@ -324,6 +313,8 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         input_atten_dB=1,
         input_amp_dB=1.0,
         input_noise_factor_dB=-10,
+        input_filter_center_freq_and_BW_Hz_lists= [ [193.2e12,193.0e12],[40e9,20e9] ],
+        output_filter_center_freq_and_BW_Hz_lists=[ [193.3e12,194.0e12],[50e9,20e9]  ],
         input_disp_comp_s2=-0.5*beta_list[0]*length_test*0.5,
         output_atten_dB=1.0,
         output_amp_dB=24,
@@ -343,6 +334,8 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         input_amp_dB=1.0/2,
         input_noise_factor_dB=-10/2,
         output_atten_dB=1.0/2,
+        input_filter_center_freq_and_BW_Hz_lists= [ [193.2e12,193.0e12],[30e9,20e9] ],
+        output_filter_center_freq_and_BW_Hz_lists=[ [193.3e12,194.0e12],[20e9,20e9]  ],
         output_amp_dB=24/2,
         output_noise_factor_dB=-10/2,
         describe_fiber_flag=False)
@@ -358,6 +351,8 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
         input_atten_dB=1/3,
         input_amp_dB=1.0/3,
         input_noise_factor_dB=-10/3,
+        input_filter_center_freq_and_BW_Hz_lists= [ [193.4e12,193.0e12],[43e9,20e9] ],
+        output_filter_center_freq_and_BW_Hz_lists=[ [193.3e12,192.0e12],[50e9,21e9]  ],
         output_atten_dB=1.0/3,
         output_amp_dB=24/3,
         output_noise_factor_dB=-10/3,
@@ -388,13 +383,12 @@ def unit_test_saveload_FiberLink(show_plot_flag = False):
 
 
 
+    path_to_json = os.path.join(ssfm_result_list[0].dirs[1],"input_info",'run_info.json')
+    fiber_link_loaded = load_fiber_link_from_json(path_to_json)
 
-    fiber_link_loaded = load_fiber_link(ssfm_result_list[0].dirs[1])
-
-    assert compare_fiber_links(fiber_link, fiber_link_loaded)
+    assert fiber_link == fiber_link_loaded
 
     print("Successfully saved and reloaded FiberLink!")
-
 
 def unit_test_saveload_InputSignal(show_plot_flag = False):
     """
@@ -476,7 +470,8 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
 
 
 
-    input_signal_loaded = load_input_signal(ssfm_result_list[0].dirs[1])
+    path_to_json = os.path.join(ssfm_result_list[0].dirs[1],"input_info",'run_info.json')
+    input_signal_loaded = load_input_signal_from_json(path_to_json)
 
     field_diff_value = compare_field_energies(input_signal_loaded.pulse_field,
                                               test_input_signal.pulse_field)
@@ -507,8 +502,9 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
         experiment_name=exp_name
     )
 
+    path_to_json = os.path.join(ssfm_result_list[0].dirs[1],"input_info",'run_info.json')
 
-    input_signal_loaded = load_input_signal(ssfm_result_list[0].dirs[1])
+    input_signal_loaded = load_input_signal_from_json(path_to_json)
 
     if show_plot_flag:
         fig,ax = plt.subplots(dpi=300)
@@ -524,7 +520,6 @@ def unit_test_saveload_InputSignal(show_plot_flag = False):
     but should be <2e-30 when reloading random input signal!!!"""
 
     print("Successfully saved and reloaded InputSignal for Random signal!")
-
 
 
 
@@ -1169,7 +1164,6 @@ def ssfm_with_everything(show_plot_flag = False):
 
 
 
-    #assert 1==2
     fiber_list = [fiber_test]
     fiber_link = FiberLink(fiber_list)
 

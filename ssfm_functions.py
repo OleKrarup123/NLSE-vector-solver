@@ -608,50 +608,7 @@ class TimeFreq:
         )
         print("   ", file=d)
 
-    def save_TimeFreq(self):
-        """
-        Saves info needed to construct this TimeFreq instance to .csv
-        file so they can be loaded later using the load_TimeFreq function.
 
-        Parameters:
-            self
-        """
-        timeFreq_df = pd.DataFrame(
-            columns=["number_of_points", "time_step_s", "center_frequency_Hz"]
-        )
-
-        timeFreq_df.loc[len(timeFreq_df.index)] = [
-            self.number_of_points,
-            self.time_step_s,
-            self.center_frequency_Hz,
-        ]
-
-        timeFreq_df.to_csv("timeFreq.csv", index=False)
-
-
-def load_TimeFreq(path: str) -> TimeFreq:
-    """
-    Loads TimeFreq for previous run
-
-    Takes a path to a previous run, opens the relevant .csv file and extracts
-    stored info from which the timeFreq class for that run can be restored.
-
-    Parameters:
-        path (str): Path to previous run
-
-    Returns:
-        time_freq: TimeFreq used in previous run.
-
-    """
-    path_to_saved_timeFreq = os.path.join(path)
-    df = pd.read_csv( os.path.join(path_to_saved_timeFreq,'input_info','timeFreq.csv') )
-    number_of_points = df["number_of_points"]
-    time_step_s = df["time_step_s"]
-    center_frequency_Hz = df["center_frequency_Hz"]
-
-    return TimeFreq(int(number_of_points[0]),
-                    time_step_s[0],
-                    center_frequency_Hz[0])
 
 
 
@@ -1829,144 +1786,7 @@ class FiberLink:
 
         return disp_so_far
 
-    # TODO: Find a way to save filter functions
-    def save_fiber_link(self):
-        """
-        Saves info about each fiber in span to .csv file so they can be
-        loaded later by the load_fiber_link function
 
-        Parameters:
-            self
-        """
-
-        fiber_df = pd.DataFrame(
-            columns=[
-                "fiber_index",
-                "length_m",
-                "number_of_steps",
-                "gamma_per_W_per_m",
-                "beta2_s2_per_m",
-                "beta3_s3_per_m",
-                "beta4_s4_per_m",
-                "beta5_s5_per_m",
-                "beta6_s6_per_m",
-                "beta7_s7_per_m",
-                "beta8_s8_per_m",
-                "alpha_dB_per_m",
-                "use_self_steepening_flag",
-                "raman_model",
-                "input_atten_dB",
-                "input_amp_dB",
-                "input_noise_factor_dB",
-                "input_disp_comp_s2",
-                "output_amp_dB",
-                "output_noise_factor_dB",
-                "output_atten_dB",
-                "output_disp_comp_s2"
-
-
-            ]
-        )
-
-        for fiber_index, fiber in enumerate(self.fiber_list):
-            fiber_df.loc[len(fiber_df.index)] = [
-                fiber_index,
-                fiber.length_m,
-                fiber.number_of_steps,
-                fiber.gamma_per_W_per_m,
-                fiber.beta_list[0],
-                fiber.beta_list[1],
-                fiber.beta_list[2],
-                fiber.beta_list[3],
-                fiber.beta_list[4],
-                fiber.beta_list[5],
-                fiber.beta_list[6],
-                fiber.alpha_dB_per_m,
-                fiber.use_self_steepening_flag,
-                str(fiber.raman_model),
-                fiber.input_atten_dB,
-                fiber.input_amp_dB,
-                fiber.input_noise_factor_dB,
-                fiber.input_disp_comp_s2,
-                fiber.output_amp_dB,
-                fiber.output_noise_factor_dB,
-                fiber.output_atten_dB,
-                fiber.output_disp_comp_s2
-            ]
-        fiber_df.to_csv("fiber_link.csv", index=False)
-
-
-# TODO: Find a way to load filter functions
-def load_fiber_link(path: str) -> FiberLink:
-    """
-    Loads FiberLink for previous run
-
-    Takes a path to a previous run, opens the relevant .csv file and extracts
-    stored info from which the FiberLink for that run can be restored.
-
-    Parameters:
-        path (str): Path to previous run
-
-    Returns:
-        FiberLink: A class containing a list of fibers from a previous run.
-
-    """
-
-    df = pd.read_csv( os.path.join(path,'input_info','fiber_link.csv') )
-    length_m = df["length_m"]
-    number_of_steps = df["number_of_steps"]
-    gamma_per_W_per_m = df["gamma_per_W_per_m"]
-    beta2_s2_per_m = df["beta2_s2_per_m"]
-    beta3_s3_per_m = df["beta3_s3_per_m"]
-    beta4_s4_per_m = df["beta4_s4_per_m"]
-    beta5_s5_per_m = df["beta5_s5_per_m"]
-    beta6_s6_per_m = df["beta6_s6_per_m"]
-    beta7_s7_per_m = df["beta7_s7_per_m"]
-    beta8_s8_per_m = df["beta8_s8_per_m"]
-    alpha_dB_per_m = df["alpha_dB_per_m"]
-    use_self_steepening_flag = df["use_self_steepening_flag"]
-    raman_model = df["raman_model"]
-    input_atten_dB = df["input_atten_dB"],
-    input_amp_dB = df["input_amp_dB"],
-    input_noise_factor_dB = df["input_noise_factor_dB"],
-    input_disp_comp_s2 =  df["input_disp_comp_s2"]
-    output_amp_dB = df["output_amp_dB"],
-    output_noise_factor_dB = df["output_noise_factor_dB"],
-    output_atten_dB = df["output_atten_dB"]
-    output_disp_comp_s2 =  df["output_disp_comp_s2"]
-
-
-    fiber_list = []
-
-    for i in range(len(length_m)):
-        beta_list_i = [
-            beta2_s2_per_m[i],
-            beta3_s3_per_m[i],
-            beta4_s4_per_m[i],
-            beta5_s5_per_m[i],
-            beta6_s6_per_m[i],
-            beta7_s7_per_m[i],
-            beta8_s8_per_m[i],
-        ]
-        current_fiber = FiberSpan(
-            length_m[i],
-            number_of_steps[i],
-            gamma_per_W_per_m[i],
-            beta_list_i,
-            alpha_dB_per_m[i],
-            use_self_steepening_flag=use_self_steepening_flag[i],
-            raman_model=raman_model[i],
-            input_atten_dB=input_atten_dB[0][i],
-            input_amp_dB=input_amp_dB[0][i],
-            input_noise_factor_dB=input_noise_factor_dB[0][i],
-            input_disp_comp_s2=input_disp_comp_s2.iloc[i],
-            output_amp_dB=output_amp_dB[0][i],
-            output_noise_factor_dB=output_noise_factor_dB[0][i],
-            output_atten_dB=output_atten_dB[i],
-            output_disp_comp_s2=output_disp_comp_s2.iloc[i]
-        )
-        fiber_list.append(current_fiber)
-    return FiberLink(fiber_list)
 
 
 @dataclass
@@ -2024,9 +1844,24 @@ class InputSignal:
         time_freq_dict = self.time_freq.get_time_freq_info_dict()
 
 
-
-
-        signal_dict = {'time_freq':time_freq_dict,
+        if self.pulse_type.lower() in ['custom','random']:
+            signal_dict = {'time_freq':time_freq_dict,
+                           'duration_s':self.duration_s,
+                           'amplitude_sqrt_W':self.amplitude_sqrt_W ,
+                           'pulse_type':self.pulse_type ,
+                           'time_offset_s':self.time_offset_s ,
+                           'freq_offset_Hz':self.freq_offset_Hz ,
+                           'chirp':self.chirp ,
+                           'order':self.order ,
+                           'roll_off_factor':self.roll_off_factor ,
+                           'noise_stdev_sqrt_W':self.noise_stdev_sqrt_W ,
+                           'phase_rad':self.phase_rad ,
+                           'pulse_field_real':list(np.real(self.pulse_field)),
+                           'pulse_field_imag':list(np.imag(self.pulse_field)),
+                           'FFT_tol':self.FFT_tol ,
+                           'describe_input_signal_flag':self.describe_input_signal_flag }
+        else:
+            signal_dict = {'time_freq':time_freq_dict,
                        'duration_s':self.duration_s,
                        'amplitude_sqrt_W':self.amplitude_sqrt_W ,
                        'pulse_type':self.pulse_type ,
@@ -2039,6 +1874,9 @@ class InputSignal:
                        'phase_rad':self.phase_rad ,
                        'FFT_tol':self.FFT_tol ,
                        'describe_input_signal_flag':self.describe_input_signal_flag }
+
+
+
         return signal_dict
 
     def get_peak_pulse_power(self) -> float:
@@ -2146,146 +1984,7 @@ class InputSignal:
 
         plt.show()
 
-    def save_input_signal(self):
-        """
-        Saves info needed to construct this InputSignal instance to .csv
-        file so they can be loaded later using the load_input_signal function.
 
-        Parameters:
-            self
-        """
-
-        self.time_freq.save_TimeFreq()
-
-        if self.pulse_type.lower() in ["custom", "random"]:
-            custom_input_df = pd.DataFrame(
-                columns=["time_s", "field_sqrt_W_real",
-                         "field_sqrt_W_imag"]
-            )
-
-            custom_input_df["time_s"] = self.time_freq.t_s()
-            custom_input_df["field_sqrt_W_real"] = np.real(self.pulse_field)
-            custom_input_df["field_sqrt_W_imag"] = np.imag(self.pulse_field)
-
-            custom_input_df.to_csv(
-                "Custom_or_random_input_signal.csv", index=False)
-
-        else:
-            # Initialize dataframe
-            signal_df = pd.DataFrame(
-                columns=[
-                    "duration_s",
-                    "time_offset_s",
-                    "pulse_type",
-                    "amplitude_sqrt_W",
-                    "freq_offset_Hz",
-                    "chirp",
-                    "order",
-                    "roll_off_factor",
-                    "noise_stdev_sqrt_W",
-                    "phase_rad",
-                    "FFT_tol"
-                ]
-            )
-
-            pulse_data = [
-                self.duration_s,
-                self.time_offset_s,
-                self.pulse_type,
-                self.amplitude_sqrt_W,
-                self.freq_offset_Hz,
-                self.chirp,
-                self.order,
-                self.roll_off_factor,
-                self.noise_stdev_sqrt_W,
-                self.phase_rad,
-                self.FFT_tol
-            ]
-
-            # Fill it with values used for generating input signal
-            signal_df.loc[-1] = pulse_data
-            # Export dataframe to .csv file
-            signal_df.to_csv("Input_signal.csv", index=False)
-
-
-def load_input_signal(path: str) -> InputSignal:
-    """
-    Loads InputSignal for previous run
-
-    Takes a path to a previous run, opens the relevant .csv file and extracts
-    stored info from which the InputSignal for that run can be restored.
-
-    Parameters:
-        path (str): Path to previous run
-
-    Returns:
-        InputSignal: A class containing the input signal and time base.
-
-    """
-    # Open dataframe with pulse parameters
-    path_to_saved_input_signal = os.path.join(path)
-    try:
-        try_path = path_to_saved_input_signal + "input_info\Input_signal.csv"
-        df = pd.read_csv(try_path)
-
-        duration_s = df["duration_s"][0]
-        time_offset_s = df["time_offset_s"][0]
-        pulse_type = df["pulse_type"][0]
-        amplitude_sqrt_W = df["amplitude_sqrt_W"][0]
-        freq_offset_Hz = df["freq_offset_Hz"][0]
-        chirp = df["chirp"][0]
-        order = df["order"][0]
-        roll_off_factor = df["roll_off_factor"][0]
-        noise_stdev_sqrt_W = df["noise_stdev_sqrt_W"][0]
-        phase_rad = df["phase_rad"][0]
-        FFT_tol = df["FFT_tol"][0]
-
-        # Load timeFreq
-        old_time_freq = load_TimeFreq(path)
-
-        # Initialize class for loaded signal
-        loaded_input_signal = InputSignal(
-            old_time_freq,
-            duration_s,
-            amplitude_sqrt_W,
-            pulse_type,
-            time_offset_s,
-            freq_offset_Hz,
-            chirp,
-            order,
-            roll_off_factor,
-            noise_stdev_sqrt_W,
-            phase_rad,
-            describe_input_signal_flag=False,
-            FFT_tol=FFT_tol
-        )
-
-    except FileNotFoundError:
-        try_path = path_to_saved_input_signal + \
-            "input_info\Custom_or_random_input_signal.csv"
-        df = pd.read_csv(try_path)
-
-        A_real = np.array(df["field_sqrt_W_real"])
-        A_imag = np.array(df["field_sqrt_W_imag"])
-        A = A_real + 1j * A_imag
-
-        old_time_freq = load_TimeFreq(path)
-
-        A_spectrum = get_spectrum_from_pulse(old_time_freq.t_s(), A)
-
-        loaded_input_signal = InputSignal(
-            old_time_freq,
-            get_stdev(old_time_freq.t_s(), A),
-            np.sqrt(np.max(get_power(A))),
-            "custom",
-            describe_input_signal_flag=False,
-            FFT_tol=1e-3
-        )
-
-        loaded_input_signal.pulse_field = A
-        loaded_input_signal.spectrum_field = A_spectrum
-
-    return loaded_input_signal
 
 
 class SSFMResult:
@@ -2784,31 +2483,7 @@ def create_output_directory(experiment_name: str) -> [(str, str), datetime]:
     return (base_dir, current_dir), current_time
 
 
-def load_previous_run(base_path: str) -> [FiberLink, InputSignal]:
-    """
-    Loads all relevant info about previous run
 
-    When path to previous run folder is specified, open .csv files describing
-    fiber, signal and stepconfig.
-    Use the stored values to reconstruct the parameters for the run.
-
-    Parameters:
-        base_path (str): Path to run folder
-
-    Returns:
-        fiber_link (FiberLink): Info about fiber span consisting of
-                                1 or more fibers
-        input_signal (InputSignal): Info about input signal
-
-    """
-    print(f"Loading run in {base_path}")
-
-    fiber_link = load_fiber_link( os.path.join(base_path,'input_info') )
-    input_signal = load_input_signal( os.path.join(base_path,'input_info') )
-
-    print(f"Successfully loaded run in {base_path}")
-
-    return fiber_link, input_signal
 
 
 def get_NL_factor_no_self_steepening_no_raman(fiber: FiberSpan,
@@ -3139,10 +2814,10 @@ def SSFM(
     FFT_tol = input_signal.FFT_tol
     t = input_signal.time_freq.t_s()
     # dt = input_signal.time_freq.t_s()ime_step_s
-    f = input_signal.time_freq.f_rel_Hz()
+    f_rel_Hz = input_signal.time_freq.f_rel_Hz()
     df = input_signal.time_freq.freq_step_Hz
     fc = input_signal.time_freq.center_frequency_Hz
-
+    f_abs_Hz = input_signal.time_freq.f_abs_Hz()
     # Create output directory, switch to it and return
     # appropriate paths and current time
     dirs, current_time = create_output_directory(experiment_name)
@@ -3157,10 +2832,10 @@ def SSFM(
     os.chdir(new_folder_path)
 
     # Save parameters of fiber span to file in directory
-    fiber_link.save_fiber_link()
+    #fiber_link.save_fiber_link()
 
     # Save input signal parameters
-    input_signal.save_input_signal()
+    #input_signal.save_input_signal()
 
     save_run_info_as_json(input_signal_dict=input_signal.get_input_signal_dict(),
                           fiber_link_dict=fiber_link.get_fiber_link_dict() )
@@ -3207,7 +2882,7 @@ def SSFM(
         for idx, beta_n in enumerate(fiber.beta_list):
             n = idx + 2  # Note: zeroth entry in beta_list is beta2
             dispterm += (beta_n / np.math.factorial(n)
-                         * (2 * pi * f) ** (n)
+                         * (2 * pi * f_rel_Hz) ** (n)
                          )
 
         # Pre-calculate effect of dispersion and loss as it's
@@ -3217,8 +2892,8 @@ def SSFM(
         disp_and_loss_half_step = disp_and_loss ** 0.5
 
         # Precalculate constants for nonlinearity
-        input_filter=np.sqrt(ideal_power_filter(f+fc, fiber.input_filter_center_freq_and_BW_Hz_lists))
-        output_filter=np.sqrt(ideal_power_filter(f+fc, fiber.output_filter_center_freq_and_BW_Hz_lists))
+        input_filter=np.sqrt(ideal_power_filter(f_abs_Hz, fiber.input_filter_center_freq_and_BW_Hz_lists))
+        output_filter=np.sqrt(ideal_power_filter(f_abs_Hz, fiber.output_filter_center_freq_and_BW_Hz_lists))
 
         # Use simple NL model by default if Raman is ignored
 
@@ -3256,18 +2931,18 @@ def SSFM(
 
 
         input_atten_field_lin = np.sqrt(dB_to_lin(fiber.input_atten_dB))
-        input_disp_comp_factor = np.exp(1j*fiber.input_disp_comp_s2*(2*pi*f)**2)
+        input_disp_comp_factor = np.exp(1j*fiber.input_disp_comp_s2*(2*pi*f_rel_Hz)**2)
         output_disp_comp_factor = 1.0
 
 
-        random_phases_input = np.random.uniform(-pi, pi, len(f))
+        random_phases_input = np.random.uniform(-pi, pi, len(f_rel_Hz))
         random_phase_factor_input = np.exp(1j * random_phases_input)
         input_amp_field_factor = 10 ** (fiber.input_amp_dB / 20)
         input_noise_ASE_array = random_phase_factor_input * np.sqrt(
             get_noise_PSD(
                 fiber.input_noise_factor_dB,
                 fiber.input_amp_dB,
-                f + fc,
+                f_abs_Hz,
                 df
             )
         )
@@ -3275,9 +2950,9 @@ def SSFM(
         output_atten_field_lin = 1.0  # temporarily=1 until we reach end
 
         # temporary values until we reach fiber end
-        noise_ASE_array = 1.0 * np.zeros_like(f)
+        noise_ASE_array = 1.0 * np.zeros_like(f_rel_Hz)
         output_amp_field_factor = 1.0
-        output_filter_field_array = (1.0+0j)*np.ones_like(f)
+        output_filter_field_array = (1.0+0j)*np.ones_like(f_rel_Hz)
 
         # Initialize arrays to store temporal profile
         initial_pulse = np.copy(current_input_signal.pulse_field)
@@ -3325,19 +3000,19 @@ def SSFM(
 
             # If at the end of fiber span, apply output amp and noise
             if z_step_index == fiber.number_of_steps - 1:
-                randomPhases = np.random.uniform(-pi, pi, len(f))
+                randomPhases = np.random.uniform(-pi, pi, len(f_rel_Hz))
                 randomPhaseFactor = np.exp(1j * randomPhases)
                 output_atten_field_lin = np.sqrt(dB_to_lin(
                     fiber.output_atten_dB))
                 output_filter_field_array = output_filter
-                output_disp_comp_factor = np.exp(1j*fiber.output_disp_comp_s2*(2*pi*f)**2)
+                output_disp_comp_factor = np.exp(1j*fiber.output_disp_comp_s2*(2*pi*f_rel_Hz)**2)
 
                 output_amp_field_factor = 10 ** (fiber.output_amp_dB / 20)
                 noise_ASE_array = randomPhaseFactor * np.sqrt(
                     get_noise_PSD(
                         fiber.output_noise_factor_dB,
                         fiber.output_amp_dB,
-                        f + fc,
+                        f_abs_Hz,
                         df
                     )
                 )
@@ -3349,13 +3024,13 @@ def SSFM(
             ) * output_atten_field_lin*output_filter_field_array*output_disp_comp_factor
 
             ssfm_result.pulse_matrix[z_step_index + 1, :] = get_pulse_from_spectrum(
-                f,
+                f_rel_Hz,
                 ssfm_result.spectrum_field_matrix[z_step_index + 1, :],
                 FFT_tol=FFT_tol
             )
 
             # Return to time domain
-            pulse = get_pulse_from_spectrum(f,
+            pulse = get_pulse_from_spectrum(f_rel_Hz,
                                             spectrum,
                                             FFT_tol=FFT_tol)
 
@@ -6296,7 +5971,8 @@ def load_input_signal_from_json(path_to_json:str) -> InputSignal:
                                    FFT_tol= signal_dict["FFT_tol"],
                                    describe_input_signal_flag= signal_dict["describe_input_signal_flag"])
 
-
+        if signal_dict["pulse_type"].lower() in ['custom','random']:
+            input_signal.pulse_field =  np.array(signal_dict["pulse_field_real"])+1j*np.array(signal_dict["pulse_field_imag"])
 
 
 
@@ -6332,7 +6008,7 @@ if __name__ == "__main__":
     # Set up signal
     test_FFT_tol = 1e-2
     CW_amplitude_sqrt_W = np.sqrt(0.1)
-    CW_pulse_type = "cw"
+    CW_pulse_type = "random"
 
     pulse_amplitude_sqrt_W = np.sqrt(10)
     pulse_duration_s = 500e-12
@@ -6345,6 +6021,7 @@ if __name__ == "__main__":
                                     amplitude_sqrt_W = CW_amplitude_sqrt_W,
                                     pulse_type=CW_pulse_type,
                                     FFT_tol=test_FFT_tol)
+
 
 
     test_input_signal.pulse_field+= get_pulse(time_freq_test.t_s(),
@@ -6391,15 +6068,24 @@ if __name__ == "__main__":
         input_filter_center_freq_and_BW_Hz_lists=[ [193.2e12,194.0e12],[40e9,20e9]  ],
         output_filter_center_freq_and_BW_Hz_lists=[ [193.3e12,194.0e12],[50e9,20e9]  ])
 
+    fiber_test2 = FiberSpan(
+        length_test,
+        number_of_steps,
+        gamma_test,
+        beta_list,
+        alpha_test,
+        use_self_steepening_flag=True,
+        raman_model="agrawal",
+        input_filter_center_freq_and_BW_Hz_lists=[ [193.2e12,193.0e12],[40e9,20e9]  ],
+        output_filter_center_freq_and_BW_Hz_lists=[ [193.3e12,194.0e12],[50e9,20e9]  ])
 
-
-    #assert 1==2
-    fiber_list = [fiber_test,fiber_test,fiber_test,fiber_test]
+    fiber_list = [fiber_test,fiber_test,fiber_test,fiber_test2]
     fiber_link = FiberLink(fiber_list)
 
 
 
-    exp_name='filter_save_test'
+
+    exp_name='save_without_csv_test'
     ssfm_result_list = SSFM(
         fiber_link,
         test_input_signal,
